@@ -1,0 +1,4387 @@
+--!nolint UnknownGlobal
+--[[
+	🎬 ECO  —  Gravador de Movimentos (LocalScript único)  —  por 0tavio50
+	Onde colocar: StarterPlayer > StarterPlayerScripts  (tipo LocalScript)
+
+	ABAS
+	  🎥 Gravar      → gravar (iniciar / parar e salvar com nome) + «Linhas mais retas»
+	  ✂ Regravar     → refaz só uma parte de uma gravação ou grava um novo início que se junta ao trajeto antigo
+	  ▶ Reproduzir   → ir ao ponto inicial (teleporte ou andando), imitar, medidor de distância ao vivo
+	  📊 Análise     → números, mapa do trajeto visto de cima e gráfico de velocidade da gravação selecionada
+	  ⚙ Ajustes      → sistema, movimento, guias no mundo e salvamento
+	  A faixa no topo mostra sempre a gravação selecionada, a distância até o início e o modo.
+
+	RITMO DA ANIMAÇÃO (braços e pernas)
+	  Ao gravar, o script anota a velocidade da animação de andar de cada instante. Na imitação ela é
+	  reaplicada, então braços e pernas se mexem no mesmo ritmo de quando você gravou (sem «câmera lenta»).
+	  Gravações antigas, feitas antes disso, usam a regra padrão do Roblox: velocidade do boneco ÷ 16.
+
+	GUIA NO MUNDO: LINHA OU RASTRO DE BONECOS
+	  Ajustes → «Guias no mundo» → «Guia do trajeto»: escolha entre a linha colorida com pontinhos
+	  (padrão) ou um rastro de bonecos fantasmas andando o trajeto em loop, cada um atrasado em
+	  relação ao anterior pelo «Intervalo do boneco» (padrão 2s). Intervalo menor = mais bonecos
+	  andando ao mesmo tempo (até 15). Só um dos dois guias aparece por vez. Só você vê, nos dois casos.
+	LINHAS MAIS RETAS
+	  Aba Gravar → «Linhas mais retas»: tira o «tremido» lateral do andar (o trajeto no chão vira linhas
+	  retas; curvas, alturas, tempos e pulos/quedas são mantidos). Vale para as próximas gravações e também
+	  dá para aplicar numa gravação que já existe («Aplicar à selecionada»; use «Desfazer» se não gostar).
+
+	IR AO PONTO INICIAL ANDANDO
+	  Aba Reproduzir → «Como ir ao ponto inicial». Andando, ele primeiro CALCULA a rota inteira
+	  (contornando o que estiver no caminho) e só depois começa a andar — assim não para nem
+	  recalcula no meio do trajeto, o que antes causava uma travadinha. Pula sozinho se ficar preso.
+	  Se não achar rota nenhuma, tenta ir direto mesmo assim, pulando o que puder.
+
+	LINHAS MAIS RETAS
+	  Aba Gravar → «Linhas mais retas»: tira o «tremido» lateral do andar (o trajeto no chão vira linhas
+	  retas; curvas, alturas, tempos e pulos/quedas são mantidos). Vale para as próximas gravações e também
+	  dá para aplicar numa gravação que já existe («Aplicar à selecionada»; use «Desfazer» se não gostar).
+
+	IR AO PONTO INICIAL ANDANDO
+	  Aba Reproduzir → «Como ir ao ponto inicial». Andando, o personagem contorna obstáculos (pathfinding),
+	  pula quando o caminho pede ou quando fica preso e refaz o caminho se algo bloquear.
+
+	REGRAVAR TRECHOS
+	  Dois controles deslizantes definem o que fica:
+	    • «Manter o começo até»      → tudo antes desse ponto (A) é mantido
+	    • «Manter o final a partir de» → tudo depois desse ponto (B) é mantido
+	  O que está entre A e B é regravado. A = 0 refaz o começo; B = fim refaz o final.
+	  Dois pilares aparecem no mundo (ciano = A, amarelo = B) para você ver o momento exato.
+	  «📍 Aqui» marca A ou B no ponto do trajeto que fica mais perto de onde você está.
+	  Opção «Início: onde estou»: sem teleporte, a regravação começa de onde você estiver
+	  (ideal para refazer o começo). O trecho novo é emendado ao resto da gravação.
+
+	ESCONDER O BOTÃOZINHO / FECHAR O SCRIPT
+	  Ajustes → «Esconder o botãozinho»: com o painel minimizado, o 🎬 (e o ⚡) somem e o painel só abre
+	  pela tecla de «Minimizar / mostrar» (H por padrão — ela funciona até com o sistema desligado).
+	  Botão «X» no canto da janela: salva tudo e remove o script por completo (janela, guias, atalhos).
+
+	NOVO INÍCIO (juntar ao trajeto antigo)
+	  Quer começar de outro lugar sem regravar tudo? Fique no NOVO ponto inicial (fora do trajeto antigo),
+	  use «Novo início» e ande até ENCOSTAR no trajeto antigo: a gravação para sozinha, o começo antigo
+	  é descartado e o resto do trajeto antigo continua dali até o final. (Use «Desfazer» se não gostar.)
+
+	DUPLICAR
+	  O botão «📑 Duplicar» cria uma cópia da gravação selecionada, com nome automático «… (cópia)».
+
+	LIGAR / DESLIGAR
+	  O botão «⚡» no topo da janela (e o botãozinho ⚡ ao lado do 🎬 minimizado) liga e desliga o sistema.
+	  Desligado: nenhum atalho (F, R, T, G, V, Y, H…) funciona e os guias somem do mundo.
+
+	CONTAGEM
+	  Ao regravar um trecho, uma contagem grande (3 - 2 - 1 - VAI!) aparece no meio da tela,
+	  mesmo com o painel minimizado. Quando aparecer «VAI!», a gravação já começou: pode andar.
+
+	SALVAMENTO
+	  Se o ambiente tiver writefile/readfile, as gravações vão para um arquivo local e são carregadas
+	  sozinhas na próxima vez. Sem essas funções (Studio, por exemplo) elas ficam só na memória:
+	  use «Exportar» → «Exportar todas» para guardar o texto.
+]]
+
+local Players = game:GetService("Players")
+local RunService = game:GetService("RunService")
+local UserInputService = game:GetService("UserInputService")
+local HttpService = game:GetService("HttpService")
+local TweenService = game:GetService("TweenService")
+local PathfindingService = game:GetService("PathfindingService")
+
+local player = Players.LocalPlayer
+local playerGui = player:WaitForChild("PlayerGui")
+
+-- se o script rodar de novo, remove a janela antiga
+do
+	local old = playerGui:FindFirstChild("GravadorDeMovimentos")
+	if old then
+		old:Destroy()
+	end
+end
+
+----------------------------------------------------------------------
+-- CONFIGURAÇÕES
+----------------------------------------------------------------------
+local MAX_NOME = 40
+local COUNTDOWN = 3 -- segundos de contagem antes de regravar um trecho
+local FOLDER = "GravadorDeMovimentos"
+local FILE = FOLDER .. "/jogo_" .. tostring(game.PlaceId) .. ".json"
+local canFile = (type(writefile) == "function") and (type(readfile) == "function")
+
+local settings = {
+	mode = "tp", -- "tp" = teleporte por frame (mais preciso) | "nat" = natural (anda de verdade)
+	tolerance = 2, -- distância máxima (studs) do ponto inicial para a imitação começar
+	marker = true, -- disco verde no ponto inicial da gravação selecionada
+	path = true, -- trajeto da gravação selecionada desenhado no mundo
+	autosave = true, -- salva sozinho num arquivo local (quando o ambiente permite)
+	stopAtCut = true, -- ao regravar o começo/meio, para sozinho ao chegar no ponto B
+	editCopy = false, -- regravar cria uma cópia em vez de substituir a original
+	editFree = false, -- regravar começa de onde você está (sem teleporte até o ponto A)
+	hideMini = false, -- esconde o botãozinho 🎬 quando o painel está minimizado (só abre pela tecla)
+	straighten = false, -- ao gravar, deixa o trajeto mais reto (tira o «tremido» lateral do andar)
+	straightTol = 0.6, -- força das linhas retas (studs): maior = mais reto, porém mais diferente do original
+	walkGoto = false, -- «Ir ao ponto inicial» anda (calcula a rota e contorna, pulando se precisar) em vez de teleportar
+	guideMode = "line", -- guia do trajeto no mundo: "line" (traço colorido com pontinhos) ou "dummy" (boneco fantasma andando)
+	dummyInterval = 2, -- segundos entre cada boneco do rastro (menor = mais bonecos andando o trajeto ao mesmo tempo)
+}
+
+local C = {
+	bg = Color3.fromRGB(22, 24, 32),
+	panel = Color3.fromRGB(32, 35, 47),
+	card = Color3.fromRGB(40, 44, 60),
+	cardHover = Color3.fromRGB(52, 57, 80),
+	text = Color3.fromRGB(240, 242, 250),
+	sub = Color3.fromRGB(150, 158, 180),
+	green = Color3.fromRGB(60, 190, 115),
+	red = Color3.fromRGB(232, 84, 84),
+	blue = Color3.fromRGB(79, 140, 255),
+	blueDark = Color3.fromRGB(48, 86, 170),
+	teal = Color3.fromRGB(50, 170, 200),
+	yellow = Color3.fromRGB(245, 190, 70),
+	purple = Color3.fromRGB(150, 110, 240),
+	white = Color3.fromRGB(255, 255, 255),
+}
+
+local MSG_COLORS = {
+	info = { Color3.fromRGB(36, 46, 78), "💡" },
+	ok = { Color3.fromRGB(30, 66, 50), "✅" },
+	warn = { Color3.fromRGB(80, 64, 26), "⚠️" },
+	err = { Color3.fromRGB(84, 36, 40), "❌" },
+}
+
+local BLOCKED_KEYS = {
+	[Enum.KeyCode.W] = true, [Enum.KeyCode.A] = true, [Enum.KeyCode.S] = true,
+	[Enum.KeyCode.D] = true, [Enum.KeyCode.Space] = true,
+}
+
+----------------------------------------------------------------------
+-- ESTADO
+----------------------------------------------------------------------
+-- idle | recording | naming | playing | walking | countdown | io | loading
+local state = "idle"
+local enabled = true -- chave geral ⚡: desligada, nenhum atalho funciona
+local recs = {} -- { {name=, frames={}, duration=, undo=} }
+local selected = nil -- índice da gravação selecionada
+local binds = {} -- id -> Enum.KeyCode
+local rebindingId = nil
+local pending = nil -- gravação aguardando nome
+local recTarget = nil -- preenchido quando estamos regravando um trecho
+local edit = { rec = nil, a = 0, b = 0 } -- pontos A e B (em segundos) da aba Regravar
+local store = { dirty = false, token = 0, loading = false, lastSave = nil }
+local ui = { keyBtns = {}, tabBtns = {}, tabFrames = {}, sliders = {}, tab = "rec", minimized = false, cutDirty = false }
+
+local recFrames, recTime, recStart, recConn, recAnimator
+local playConn, playConn2, playConn3, playHum, playOldAuto
+
+-- funções definidas mais abaixo, mas usadas antes
+local renderList, refreshEdit, refreshStoreInfo, updateCutMarkers, saveNow, markDirty, finishEdit, updateSummary
+
+-- conexões em serviços globais (teclado, Heartbeat…): guardadas para o botão X poder desligar todas
+local closed = false
+local conns = {}
+local function onGlobal(signal, fn)
+	conns[#conns + 1] = signal:Connect(fn)
+end
+
+----------------------------------------------------------------------
+-- AJUDANTES DE UI (criação)
+----------------------------------------------------------------------
+local function make(class, props, parent)
+	local inst = Instance.new(class)
+	if inst:IsA("GuiObject") then
+		inst.BorderSizePixel = 0
+	end
+	for k, v in pairs(props) do
+		inst[k] = v
+	end
+	inst.Parent = parent
+	return inst
+end
+
+local function corner(inst, radius)
+	make("UICorner", { CornerRadius = UDim.new(0, radius) }, inst)
+end
+
+local function label(props, parent)
+	props.BackgroundTransparency = 1
+	props.Font = props.Font or Enum.Font.Gotham
+	props.TextColor3 = props.TextColor3 or C.text
+	props.TextSize = props.TextSize or 14
+	props.TextXAlignment = props.TextXAlignment or Enum.TextXAlignment.Left
+	return make("TextLabel", props, parent)
+end
+
+local function button(props, parent)
+	props.AutoButtonColor = false
+	props.Font = props.Font or Enum.Font.GothamBold
+	props.TextColor3 = props.TextColor3 or C.white
+	props.TextSize = props.TextSize or 14
+	return make("TextButton", props, parent)
+end
+
+local function esc(s)
+	return (tostring(s):gsub("&", "&amp;"):gsub("<", "&lt;"):gsub(">", "&gt;"))
+end
+
+----------------------------------------------------------------------
+-- FEEDBACK (mensagem + aviso na tela + status)
+----------------------------------------------------------------------
+local toastToken = 0
+local function showToast(text, color)
+	if not ui.toast then
+		return
+	end
+	toastToken += 1
+	local tok = toastToken
+	ui.toast.BackgroundColor3 = color
+	ui.toastLabel.Text = text
+	ui.toast.Visible = true
+	task.delay(4, function()
+		if tok == toastToken and ui.toast then
+			ui.toast.Visible = false
+		end
+	end)
+end
+
+local function setMsg(text, kind)
+	local info = MSG_COLORS[kind or "info"]
+	if ui.msgFrame then
+		ui.msgFrame.BackgroundColor3 = info[1]
+		ui.msgLabel.Text = info[2] .. "  " .. text
+	end
+	-- com o painel minimizado a mensagem do rodapé não aparece: mostra um aviso na tela
+	if ui.minimized then
+		showToast(info[2] .. "  " .. text, info[1])
+	end
+end
+
+local function setStatus(text, color)
+	if not enabled then
+		text, color = "Desligado", C.sub
+	end
+	if ui.statusLabel then
+		ui.statusLabel.Text = text
+		ui.statusDot.BackgroundColor3 = color
+		ui.miniDot.BackgroundColor3 = color
+	end
+end
+
+-- contagem grande no meio da tela (3-2-1-VAI!): aparece mesmo com o painel minimizado
+local countToken = 0
+local function showCount(big, caption, color, bigSize)
+	if not ui.count then
+		return
+	end
+	countToken += 1
+	ui.countNum.Text = big
+	ui.countNum.TextSize = bigSize or 120
+	ui.countCaption.Text = caption
+	ui.countStroke.Color = color
+	ui.countPulse.Scale = 1.3
+	ui.count.Visible = true
+	TweenService:Create(ui.countPulse, TweenInfo.new(0.4, Enum.EasingStyle.Back, Enum.EasingDirection.Out), { Scale = 1 }):Play()
+end
+
+local function hideCount(delay)
+	countToken += 1
+	local tok = countToken
+	if delay and delay > 0 then
+		task.delay(delay, function()
+			if tok == countToken and ui.count then
+				ui.count.Visible = false
+			end
+		end)
+	elseif ui.count then
+		ui.count.Visible = false
+	end
+end
+
+local function keyName(id)
+	return binds[id].Name
+end
+
+local function busyMessage()
+	if state == "recording" then
+		setMsg("Você está gravando agora. Pare a gravação primeiro (tecla [" .. keyName("stop") .. "]).", "warn")
+	elseif state == "playing" or state == "walking" or state == "countdown" then
+		setMsg("Há uma imitação, caminhada ou contagem em andamento. Para interromper, use a tecla [" .. keyName("stopplay") .. "].", "warn")
+	elseif state == "naming" then
+		setMsg("Termine primeiro a janela de nome (salvar ou cancelar).", "warn")
+	elseif state == "io" then
+		setMsg("Feche a janela de exportar/importar primeiro.", "warn")
+	elseif state == "loading" then
+		setMsg("Carregando suas gravações salvas… aguarde um instante.", "info")
+	end
+end
+
+----------------------------------------------------------------------
+-- PERSONAGEM / CONTROLES
+----------------------------------------------------------------------
+local function getCharacter()
+	local char = player.Character
+	if not char then
+		return
+	end
+	local hum = char:FindFirstChildOfClass("Humanoid")
+	local root = char:FindFirstChild("HumanoidRootPart")
+	if hum and root and hum.Health > 0 then
+		return char, hum, root
+	end
+end
+
+local function setControls(enabled)
+	pcall(function()
+		local scripts = player:FindFirstChild("PlayerScripts")
+		local module = scripts and scripts:FindFirstChild("PlayerModule")
+		if module then
+			local controls = require(module):GetControls()
+			if enabled then
+				controls:Enable()
+			else
+				controls:Disable()
+			end
+		end
+	end)
+end
+
+local function selectedRec()
+	if not selected or not recs[selected] then
+		setMsg("Selecione uma gravação na lista da esquerda primeiro.", "warn")
+		return nil
+	end
+	return recs[selected]
+end
+
+----------------------------------------------------------------------
+-- SERIALIZAÇÃO (exportar / importar / arquivo)
+----------------------------------------------------------------------
+local function rnd(n, p)
+	return math.round(n * p) / p
+end
+
+local function encodeRows(frames)
+	local rows = table.create(#frames)
+	local keys, keyIdx = {}, {}
+	for i, f in ipairs(frames) do
+		local row = { rnd(f.t, 10000) }
+		local comps = { f.cf:GetComponents() }
+		for k = 1, 12 do
+			row[#row + 1] = rnd(comps[k], k <= 3 and 10000 or 100000)
+		end
+		row[#row + 1] = rnd(f.v.X, 1000)
+		row[#row + 1] = rnd(f.v.Y, 1000)
+		row[#row + 1] = rnd(f.v.Z, 1000)
+		row[#row + 1] = rnd(f.m.X, 1000)
+		row[#row + 1] = rnd(f.m.Y, 1000)
+		row[#row + 1] = rnd(f.m.Z, 1000)
+		row[#row + 1] = f.j and 1 or 0
+		-- ritmo da animação de andar (velocidade da animação) e qual animação era; 0 = não registrado
+		local ki = 0
+		if f.s and f.k then
+			ki = keyIdx[f.k]
+			if not ki then
+				keys[#keys + 1] = f.k
+				ki = #keys
+				keyIdx[f.k] = ki
+			end
+		end
+		row[#row + 1] = f.s and rnd(f.s, 1000) or 0
+		row[#row + 1] = ki
+		rows[i] = row
+	end
+	return rows, keys
+end
+-- JSON de uma gravação (as linhas ficam em cache: só são recodificadas quando a gravação muda)
+local function recJSON(rec)
+	if not rec.rows then
+		local rows, keys = encodeRows(rec.frames)
+		rec.rows = HttpService:JSONEncode(rows)
+		rec.rowKeys = HttpService:JSONEncode(keys)
+	end
+	local nameJson = string.sub(HttpService:JSONEncode({ rec.name }), 2, -2)
+	return '{"n":' .. nameJson .. ',"d":' .. tostring(rnd(rec.duration, 10000)) .. ',"f":' .. rec.rows .. ',"k":' .. (rec.rowKeys or "[]") .. "}"
+end
+
+local function encodeAll()
+	local parts = {}
+	for i, r in ipairs(recs) do
+		parts[i] = recJSON(r)
+	end
+	return '{"gravador":2,"recs":[' .. table.concat(parts, ",") .. "]}"
+end
+
+local function decodeRecTable(data, fallbackName, yieldEvery)
+	assert(type(data) == "table" and type(data.f) == "table" and #data.f >= 2, "formato inválido")
+	local frames = table.create(#data.f)
+	local keys = (type(data.k) == "table") and data.k or {}
+	for i, row in ipairs(data.f) do
+		assert(type(row) == "table" and (#row == 20 or #row == 22), "linha inválida")
+		for k = 1, #row do
+			assert(type(row[k]) == "number", "valor inválido")
+		end
+		frames[i] = {
+			t = row[1],
+			cf = CFrame.new(table.unpack(row, 2, 13)),
+			v = Vector3.new(row[14], row[15], row[16]),
+			m = Vector3.new(row[17], row[18], row[19]),
+			j = row[20] == 1,
+		}
+		if #row == 22 and row[22] > 0 and type(keys[row[22]]) == "string" then
+			frames[i].s = row[21]
+			frames[i].k = keys[row[22]]
+		end
+		if yieldEvery and i % yieldEvery == 0 then
+			task.wait()
+		end
+	end
+	return {
+		name = tostring(data.n or fallbackName or "Importada"),
+		frames = frames,
+		duration = tonumber(data.d) or frames[#frames].t,
+	}
+end
+
+local function uniqueName(name, except)
+	local function exists(nm)
+		for _, r in ipairs(recs) do
+			if r ~= except and r.name == nm then
+				return true
+			end
+		end
+		return false
+	end
+	local base, n = name, 2
+	while exists(name) do
+		name = base .. " (" .. n .. ")"
+		n += 1
+	end
+	return name
+end
+
+----------------------------------------------------------------------
+-- SALVAMENTO EM ARQUIVO LOCAL (writefile / readfile)
+----------------------------------------------------------------------
+local function buildFile()
+	local parts = {}
+	for i, r in ipairs(recs) do
+		parts[i] = recJSON(r)
+	end
+	local keys = {}
+	for id, kc in pairs(binds) do
+		keys[id] = kc.Name
+	end
+	local cfg = {
+		mode = settings.mode,
+		tolerance = settings.tolerance,
+		marker = settings.marker,
+		path = settings.path,
+		autosave = settings.autosave,
+		stopAtCut = settings.stopAtCut,
+		editCopy = settings.editCopy,
+		editFree = settings.editFree,
+		hideMini = settings.hideMini,
+		straighten = settings.straighten,
+		straightTol = settings.straightTol,
+		walkGoto = settings.walkGoto,
+		guideMode = settings.guideMode,
+		dummyInterval = settings.dummyInterval,
+		binds = keys,
+		selected = (selected and recs[selected]) and recs[selected].name or nil,
+	}
+	return '{"v":2,"cfg":' .. HttpService:JSONEncode(cfg) .. ',"recs":[' .. table.concat(parts, ",") .. "]}"
+end
+
+saveNow = function(manual)
+	if not canFile then
+		if manual then
+			setMsg("Este ambiente não deixa o script criar arquivos (faltam writefile/readfile). Use «Exportar» → «Exportar todas» para guardar o texto.", "warn")
+		end
+		return false
+	end
+	local ok, err = pcall(function()
+		if type(isfolder) == "function" and type(makefolder) == "function" and not isfolder(FOLDER) then
+			makefolder(FOLDER)
+		end
+		writefile(FILE, buildFile())
+	end)
+	if ok then
+		store.dirty = false
+		store.lastSave = os.date("%H:%M:%S")
+		if manual then
+			setMsg(string.format("Salvo! %d gravação(ões) guardadas em «%s».", #recs, FILE), "ok")
+		end
+	else
+		warn("[Gravador] erro ao salvar: " .. tostring(err))
+		setMsg("Não consegui salvar o arquivo: " .. tostring(err), "err")
+	end
+	if refreshStoreInfo then
+		refreshStoreInfo()
+	end
+	return ok
+end
+
+-- marca que há algo novo para salvar; "immediate" salva na hora, senão espera 1,5s (agrupa mudanças)
+markDirty = function(immediate)
+	store.dirty = true
+	if not (canFile and settings.autosave) or store.loading then
+		return
+	end
+	store.token += 1
+	local tok = store.token
+	if immediate then
+		saveNow(false)
+	else
+		task.delay(1.5, function()
+			if tok == store.token and store.dirty and state ~= "recording" then
+				saveNow(false)
+			end
+		end)
+	end
+end
+
+----------------------------------------------------------------------
+-- MARCADOR DO PONTO INICIAL (só você vê)
+----------------------------------------------------------------------
+local marker = nil
+
+local function updateMarker()
+	if marker then
+		marker:Destroy()
+		marker = nil
+	end
+	if not settings.marker or not enabled then
+		return
+	end
+	local rec = selected and recs[selected]
+	if not rec then
+		return
+	end
+	local startPos = rec.frames[1].cf.Position
+	local params = RaycastParams.new()
+	params.FilterType = Enum.RaycastFilterType.Exclude
+	params.FilterDescendantsInstances = { player.Character }
+	local hit = workspace:Raycast(startPos, Vector3.new(0, -12, 0), params)
+	local pos = hit and (hit.Position + Vector3.new(0, 0.08, 0)) or (startPos - Vector3.new(0, 3, 0))
+	marker = make("Part", {
+		Name = "PontoInicialGravador",
+		Anchored = true,
+		CanCollide = false,
+		CanQuery = false,
+		CanTouch = false,
+		CastShadow = false,
+		Shape = Enum.PartType.Cylinder,
+		Size = Vector3.new(0.2, 4, 4),
+		Material = Enum.Material.Neon,
+		Color = C.green,
+		Transparency = 0.45,
+		CFrame = CFrame.new(pos) * CFrame.Angles(0, 0, math.rad(90)),
+	}, workspace)
+end
+
+----------------------------------------------------------------------
+-- TRAJETO DO CAMINHO (linha colorida no mundo, só você vê)
+----------------------------------------------------------------------
+local pathFolder = nil
+
+-- ===== análise do trajeto e «linhas mais retas» =====
+local geo = {}
+
+-- distância de um ponto ao segmento (no plano horizontal XZ)
+function geo.segDist(px, pz, ax, az, bx, bz)
+	local dx, dz = bx - ax, bz - az
+	local l2 = dx * dx + dz * dz
+	if l2 < 1e-9 then
+		return math.sqrt((px - ax) ^ 2 + (pz - az) ^ 2)
+	end
+	local t = math.clamp(((px - ax) * dx + (pz - az) * dz) / l2, 0, 1)
+	return math.sqrt((px - (ax + t * dx)) ^ 2 + (pz - (az + t * dz)) ^ 2)
+end
+
+-- Ramer–Douglas–Peucker (iterativo): índices dos vértices que precisam ficar para a linha não se desviar mais que tol
+function geo.rdp(xs, zs, a, b, tol)
+	local keep = { [a] = true, [b] = true }
+	local stack = { { a, b } }
+	while #stack > 0 do
+		local seg = table.remove(stack)
+		local i0, i1 = seg[1], seg[2]
+		local maxD, idx = 0, nil
+		for i = i0 + 1, i1 - 1 do
+			local d = geo.segDist(xs[i], zs[i], xs[i0], zs[i0], xs[i1], zs[i1])
+			if d > maxD then
+				maxD, idx = d, i
+			end
+		end
+		if idx and maxD > tol then
+			keep[idx] = true
+			stack[#stack + 1] = { i0, idx }
+			stack[#stack + 1] = { idx, i1 }
+		end
+	end
+	local out = {}
+	for i = a, b do
+		if keep[i] then
+			out[#out + 1] = i
+		end
+	end
+	return out
+end
+
+-- Deixa o trajeto no chão mais reto: tira o «tremido» lateral do andar mantendo as curvas de verdade,
+-- a altura, os tempos e tudo que é pulo/queda (esses trechos ficam intactos, com 0,2s de margem).
+-- Devolve: novos frames, desvio máximo (studs), comprimento antes e depois.
+-- dry = true: só calcula os números, sem montar os frames.
+local function straightenFrames(frames, tol, dry)
+	local n = #frames
+	if n < 3 then
+		return frames, 0, 0, 0
+	end
+	local orig, air = table.create(n, false), table.create(n, false)
+	for i, f in ipairs(frames) do
+		if f.j or math.abs(f.v.Y) > 3 then
+			orig[i] = true
+			air[i] = true
+		end
+	end
+	local lastT = -math.huge
+	for i = 1, n do
+		if orig[i] then
+			lastT = frames[i].t
+		elseif frames[i].t - lastT <= 0.2 then
+			air[i] = true
+		end
+	end
+	local nextT = math.huge
+	for i = n, 1, -1 do
+		if orig[i] then
+			nextT = frames[i].t
+		elseif nextT - frames[i].t <= 0.2 then
+			air[i] = true
+		end
+	end
+
+	local xs, zs = table.create(n, 0), table.create(n, 0)
+	for i, f in ipairs(frames) do
+		local p = f.cf.Position
+		xs[i], zs[i] = p.X, p.Z
+	end
+	local nx, nz = table.clone(xs), table.clone(zs)
+	local moved = table.create(n, false)
+	local maxShift, lenBefore, lenAfter = 0, 0, 0
+
+	local i = 1
+	while i <= n do
+		if air[i] then
+			i += 1
+		else
+			local a = i
+			while i < n and not air[i + 1] do
+				i += 1
+			end
+			local b = i
+			i += 1
+			if b - a >= 2 then
+				local kept = geo.rdp(xs, zs, a, b, tol)
+				for k = 1, #kept - 1 do
+					local i0, i1 = kept[k], kept[k + 1]
+					local ax, az, bx, bz = xs[i0], zs[i0], xs[i1], zs[i1]
+					local dx, dz = bx - ax, bz - az
+					local l2 = dx * dx + dz * dz
+					local tPrev = 0
+					for j = i0, i1 do
+						local t = 0
+						if l2 > 1e-9 then
+							t = math.clamp(((xs[j] - ax) * dx + (zs[j] - az) * dz) / l2, 0, 1)
+						end
+						if t < tPrev then
+							t = tPrev -- nunca volta atrás na linha
+						end
+						tPrev = t
+						nx[j], nz[j] = ax + t * dx, az + t * dz
+						moved[j] = true
+					end
+					lenAfter += math.sqrt(l2)
+				end
+				for j = a + 1, b do
+					lenBefore += math.sqrt((xs[j] - xs[j - 1]) ^ 2 + (zs[j] - zs[j - 1]) ^ 2)
+					local sh = math.sqrt((nx[j] - xs[j]) ^ 2 + (nz[j] - zs[j]) ^ 2)
+					if sh > maxShift then
+						maxShift = sh
+					end
+				end
+			end
+		end
+	end
+	if dry then
+		return nil, maxShift, lenBefore, lenAfter
+	end
+
+	local out = table.create(n)
+	for j, f in ipairs(frames) do
+		if moved[j] and (nx[j] ~= xs[j] or nz[j] ~= zs[j]) then
+			local p = f.cf.Position
+			local m, v = f.m, f.v
+			-- a direção do movimento acompanha a linha nova (vale também para o modo Natural)
+			local tx, tz
+			if j < n and moved[j + 1] then
+				tx, tz = nx[j + 1] - nx[j], nz[j + 1] - nz[j]
+			elseif j > 1 and moved[j - 1] then
+				tx, tz = nx[j] - nx[j - 1], nz[j] - nz[j - 1]
+			end
+			if tx then
+				local tl = math.sqrt(tx * tx + tz * tz)
+				if tl > 1e-4 then
+					local ux, uz = tx / tl, tz / tl
+					local mm = math.sqrt(m.X * m.X + m.Z * m.Z)
+					if mm > 0.1 then
+						m = Vector3.new(ux * mm, m.Y, uz * mm)
+					end
+					local sp = math.sqrt(v.X * v.X + v.Z * v.Z)
+					if sp > 0.1 then
+						v = Vector3.new(ux * sp, v.Y, uz * sp)
+					end
+				end
+			end
+			out[j] = { t = f.t, cf = CFrame.new(nx[j], p.Y, nz[j]) * f.cf.Rotation, v = v, m = m, j = f.j, s = f.s, k = f.k }
+		else
+			out[j] = f
+		end
+	end
+	return out, maxShift, lenBefore, lenAfter
+end
+
+-- números da gravação (calculados uma vez e guardados)
+local function getStats(rec)
+	if not rec.stats then
+		local len, jumps, maxSp = 0, 0, 0
+		local fr = rec.frames
+		for i, f in ipairs(fr) do
+			local sp = math.sqrt(f.v.X * f.v.X + f.v.Z * f.v.Z)
+			if sp > maxSp then
+				maxSp = sp
+			end
+			if i > 1 then
+				len += (f.cf.Position - fr[i - 1].cf.Position).Magnitude
+				if f.j and not fr[i - 1].j then
+					jumps += 1
+				end
+			end
+		end
+		local _, _, before, after = straightenFrames(fr, 0.6, true)
+		rec.stats = {
+			length = len,
+			jumps = jumps,
+			maxSpeed = maxSp,
+			avgSpeed = (rec.duration > 0) and (len / rec.duration) or 0,
+			straight = (before > 0.01) and math.min(1, after / before) or 1, -- 1 = sem tremido
+		}
+	end
+	return rec.stats
+end
+-- posições de todos os frames (em cache) e o frame mais próximo de uma posição
+local function getPts(rec)
+	if not rec.pts then
+		local pts = table.create(#rec.frames)
+		for i, f in ipairs(rec.frames) do
+			pts[i] = f.cf.Position
+		end
+		rec.pts = pts
+	end
+	return rec.pts
+end
+
+local function nearestIndex(pts, pos)
+	local best, bestD = 1, math.huge
+	for i = 1, #pts do
+		local d = (pts[i] - pos).Magnitude
+		if d < bestD then
+			best, bestD = i, d
+		end
+	end
+	return best, bestD
+end
+
+local function clearPath()
+	if pathFolder then
+		pathFolder:Destroy()
+		pathFolder = nil
+	end
+end
+
+-- distância do centro do personagem até os pés (o traço é desenhado no chão)
+local function footOffset()
+	local _, hum, root = getCharacter()
+	if hum and root and hum.RigType == Enum.HumanoidRigType.R15 then
+		return hum.HipHeight + root.Size.Y / 2
+	end
+	return 3
+end
+
+local function newPathPart(props)
+	props.Anchored = true
+	props.CanCollide = false
+	props.CanQuery = false
+	props.CanTouch = false
+	props.CastShadow = false
+	props.Material = Enum.Material.Neon
+	return make("Part", props, pathFolder)
+end
+
+----------------------------------------------------------------------
+-- BONECO-GUIA (alternativa à linha: um boneco fantasma anda o trajeto em loop, só você vê)
+----------------------------------------------------------------------
+local dummies = {} -- rastro de bonecos-guia: vários, espaçados no tempo ({ rec, phase, model, torso, head, legL, legR, armL, armR })
+local dummiesRec = nil -- gravação para a qual "dummies" foi montado
+
+local MAX_DUMMIES = 15 -- limite de segurança (gravações longas com intervalo curto não geram bonecos demais)
+
+local function clearDummyGuide()
+	for _, d in ipairs(dummies) do
+		d.model:Destroy()
+	end
+	table.clear(dummies)
+	dummiesRec = nil
+end
+
+local function dummyCount(rec)
+	return math.clamp(math.ceil(rec.duration / math.max(settings.dummyInterval, 0.1)), 1, MAX_DUMMIES)
+end
+
+local function buildDummyGuide(rec)
+	local count = dummyCount(rec)
+	if dummiesRec == rec and #dummies == count then
+		return -- já existe, do jeito certo, para esta gravação
+	end
+	clearDummyGuide()
+	dummiesRec = rec
+	for i = 1, count do
+		local model = make("Model", { Name = "BonecoGuiaGravador" .. i }, workspace)
+		local function limb(name, size)
+			return make("Part", {
+				Name = name,
+				Size = size,
+				Color = C.blueDark,
+				Material = Enum.Material.ForceField,
+				Transparency = 0.1,
+				Anchored = true,
+				CanCollide = false,
+				CanQuery = false,
+				CanTouch = false,
+				CastShadow = false,
+			}, model)
+		end
+		local d = {
+			rec = rec,
+			phase = (i - 1) * settings.dummyInterval, -- este boneco fica "atrasado" em relação ao primeiro
+			model = model,
+			torso = limb("Torso", Vector3.new(2, 2, 1)),
+			head = limb("Cabeça", Vector3.new(1.2, 1.2, 1.2)),
+			legL = limb("PernaEsquerda", Vector3.new(0.7, 2, 0.7)),
+			legR = limb("PernaDireita", Vector3.new(0.7, 2, 0.7)),
+			armL = limb("BraçoEsquerdo", Vector3.new(0.6, 1.8, 0.6)),
+			armR = limb("BraçoDireito", Vector3.new(0.6, 1.8, 0.6)),
+		}
+		d.torso.Color = C.blue
+		d.head.Color = C.blue
+		dummies[#dummies + 1] = d
+	end
+end
+
+-- índice do último frame com tempo <= t (para interpolar com o próximo)
+local function floorFrame(frames, t)
+	local lo, hi = 1, #frames
+	while lo < hi do
+		local mid = (lo + hi + 1) // 2
+		if frames[mid].t <= t then
+			lo = mid
+		else
+			hi = mid - 1
+		end
+	end
+	return lo
+end
+
+-- pose (CFrame, velocidade, se está no ar) no instante t de uma gravação, interpolada entre dois frames
+local function sampleAt(frames, t)
+	local i = floorFrame(frames, t)
+	local a, b = frames[i], frames[i + 1]
+	if not b then
+		return a.cf, a.v, a.j
+	end
+	local alpha = math.clamp((t - a.t) / math.max(b.t - a.t, 1e-6), 0, 1)
+	return a.cf:Lerp(b.cf, alpha), a.v:Lerp(b.v, alpha), (alpha > 0.5) and b.j or a.j
+end
+
+-- posiciona o boneco-guia no instante t do loop (braços e pernas balançam de acordo com a velocidade)
+local function poseDummy(d, t)
+	local cf, v, air = sampleAt(d.rec.frames, t)
+	local sp = math.sqrt(v.X * v.X + v.Z * v.Z)
+	local amp = math.clamp(sp / 16, 0, 1)
+	local swing = math.sin(t * (5 + amp * 5)) * amp * 0.7
+	d.torso.CFrame = cf
+	d.head.CFrame = cf * CFrame.new(0, 1.7, 0)
+	if air then
+		d.legL.CFrame = cf * CFrame.new(-0.55, -1, 0.3) * CFrame.Angles(-0.8, 0, 0) * CFrame.new(0, -1, 0)
+		d.legR.CFrame = cf * CFrame.new(0.55, -1, 0.3) * CFrame.Angles(-0.8, 0, 0) * CFrame.new(0, -1, 0)
+		d.armL.CFrame = cf * CFrame.new(-1.35, 0.9, 0) * CFrame.Angles(-0.4, 0, 0) * CFrame.new(0, -0.9, 0)
+		d.armR.CFrame = cf * CFrame.new(1.35, 0.9, 0) * CFrame.Angles(-0.4, 0, 0) * CFrame.new(0, -0.9, 0)
+	else
+		d.legL.CFrame = cf * CFrame.new(-0.55, -1, 0) * CFrame.Angles(swing, 0, 0) * CFrame.new(0, -1, 0)
+		d.legR.CFrame = cf * CFrame.new(0.55, -1, 0) * CFrame.Angles(-swing, 0, 0) * CFrame.new(0, -1, 0)
+		d.armL.CFrame = cf * CFrame.new(-1.35, 0.9, 0) * CFrame.Angles(-swing, 0, 0) * CFrame.new(0, -0.9, 0)
+		d.armR.CFrame = cf * CFrame.new(1.35, 0.9, 0) * CFrame.Angles(swing, 0, 0) * CFrame.new(0, -0.9, 0)
+	end
+end
+local function updatePath()
+	clearPath()
+	if not settings.path or not enabled then
+		clearDummyGuide()
+		return
+	end
+	local rec = selected and recs[selected]
+	if not rec then
+		clearDummyGuide()
+		return
+	end
+	if settings.guideMode == "dummy" then
+		buildDummyGuide(rec)
+		return
+	end
+	clearDummyGuide()
+	local frames = rec.frames
+	local down = Vector3.new(0, footOffset(), 0)
+	local step = math.max(0.6, getStats(rec).length / 350) -- no máximo ~350 trechos
+
+	local pts, jumps = { frames[1].cf.Position - down }, {}
+	local last = pts[1]
+	for i = 2, #frames do
+		local p = frames[i].cf.Position - down
+		if frames[i].j and not frames[i - 1].j then
+			jumps[#jumps + 1] = p
+		end
+		if (p - last).Magnitude >= step or i == #frames then
+			pts[#pts + 1] = p
+			last = p
+		end
+	end
+
+	pathFolder = make("Folder", { Name = "TrajetoGravador" }, workspace)
+	local segs = #pts - 1
+	for k = 1, segs do
+		local a, b = pts[k], pts[k + 1]
+		local len = (b - a).Magnitude
+		if len > 0.01 then
+			newPathPart({
+				Name = "Trecho",
+				Size = Vector3.new(0.2, 0.2, len),
+				Color = Color3.fromHSV(0.36 * (1 - k / segs), 0.85, 1), -- verde → amarelo → vermelho
+				Transparency = 0.2,
+				CFrame = CFrame.lookAt(a, b) * CFrame.new(0, 0, -len / 2),
+			})
+		end
+	end
+	for _, p in ipairs(jumps) do
+		newPathPart({
+			Name = "Pulo",
+			Shape = Enum.PartType.Ball,
+			Size = Vector3.new(0.9, 0.9, 0.9),
+			Color = C.yellow,
+			Transparency = 0.1,
+			CFrame = CFrame.new(p),
+		})
+	end
+	newPathPart({
+		Name = "Fim",
+		Shape = Enum.PartType.Ball,
+		Size = Vector3.new(1.4, 1.4, 1.4),
+		Color = C.red,
+		Transparency = 0.1,
+		CFrame = CFrame.new(pts[#pts]),
+	})
+end
+
+----------------------------------------------------------------------
+-- PONTOS A / B DA REGRAVAÇÃO DE TRECHOS
+----------------------------------------------------------------------
+-- índice do frame mais próximo do tempo t
+local function frameIndexAt(frames, t)
+	local lo, hi = 1, #frames
+	while lo < hi do
+		local mid = (lo + hi) // 2
+		if frames[mid].t < t then
+			lo = mid + 1
+		else
+			hi = mid
+		end
+	end
+	if lo > 1 and (t - frames[lo - 1].t) < (frames[lo].t - t) then
+		lo -= 1
+	end
+	return lo
+end
+
+-- garante que A e B pertencem à gravação selecionada e estão em ordem
+local function ensureEdit()
+	local rec = selected and recs[selected]
+	if not rec then
+		edit.rec = nil
+		return nil
+	end
+	if edit.rec ~= rec then
+		edit.rec = rec
+		edit.a = rec.duration / 2
+		edit.b = rec.duration
+	end
+	edit.a = math.clamp(edit.a, 0, rec.duration)
+	edit.b = math.clamp(edit.b, edit.a, rec.duration)
+	return rec, edit
+end
+
+local cutFolder = nil
+
+local function clearCutMarkers()
+	if cutFolder then
+		cutFolder:Destroy()
+		cutFolder = nil
+	end
+end
+
+local function makeCutMarker(pos, color, text)
+	local pillar = make("Part", {
+		Name = "Marca",
+		Anchored = true,
+		CanCollide = false,
+		CanQuery = false,
+		CanTouch = false,
+		CastShadow = false,
+		Material = Enum.Material.Neon,
+		Color = color,
+		Transparency = 0.35,
+		Size = Vector3.new(0.5, 9, 0.5),
+		CFrame = CFrame.new(pos + Vector3.new(0, 4.5, 0)),
+	}, cutFolder)
+	make("Part", {
+		Name = "Disco",
+		Anchored = true,
+		CanCollide = false,
+		CanQuery = false,
+		CanTouch = false,
+		CastShadow = false,
+		Shape = Enum.PartType.Cylinder,
+		Size = Vector3.new(0.2, 3.5, 3.5),
+		Material = Enum.Material.Neon,
+		Color = color,
+		Transparency = 0.4,
+		CFrame = CFrame.new(pos + Vector3.new(0, 0.08, 0)) * CFrame.Angles(0, 0, math.rad(90)),
+	}, cutFolder)
+	local bb = make("BillboardGui", {
+		Size = UDim2.fromOffset(230, 30),
+		StudsOffset = Vector3.new(0, 6, 0),
+		AlwaysOnTop = true,
+		Adornee = pillar,
+	}, pillar)
+	local lb = label({
+		Text = text,
+		Font = Enum.Font.GothamBold,
+		TextSize = 13,
+		TextXAlignment = Enum.TextXAlignment.Center,
+		Size = UDim2.fromScale(1, 1),
+	}, bb)
+	lb.BackgroundTransparency = 0.2
+	lb.BackgroundColor3 = C.bg
+	corner(lb, 8)
+end
+
+updateCutMarkers = function()
+	clearCutMarkers()
+	if not enabled or (recTarget and recTarget.join) or (ui.tab ~= "edit" and not recTarget) then
+		return
+	end
+	local rec = ensureEdit()
+	if not rec then
+		return
+	end
+	local frames = rec.frames
+	local ia = frameIndexAt(frames, edit.a)
+	local ib = math.max(ia, frameIndexAt(frames, edit.b))
+	local down = Vector3.new(0, footOffset(), 0)
+	cutFolder = make("Folder", { Name = "MarcasGravador" }, workspace)
+	local textA
+	if settings.editFree then
+		textA = (ia > 1) and string.format("A • %.1fs  (a parte mantida termina aqui)", frames[ia].t) or "A • início original"
+	else
+		textA = string.format("A • %.1fs  (a regravação começa aqui)", frames[ia].t)
+	end
+	makeCutMarker(frames[ia].cf.Position - down, C.teal, textA)
+	if ib < #frames then
+		makeCutMarker(frames[ib].cf.Position - down, C.yellow, string.format("B • %.1fs  (volta ao original aqui)", frames[ib].t))
+	end
+end
+
+----------------------------------------------------------------------
+-- LISTA / TEXTOS DINÂMICOS
+----------------------------------------------------------------------
+renderList = function()
+	local listFrame = ui.listFrame
+	for _, child in ipairs(listFrame:GetChildren()) do
+		if child:IsA("TextButton") then
+			child:Destroy()
+		end
+	end
+	ui.emptyLabel.Visible = (#recs == 0)
+
+	for i, rec in ipairs(recs) do
+		local item = button({
+			Name = "Item",
+			Size = UDim2.new(1, -6, 0, 52),
+			BackgroundColor3 = (i == selected) and C.blueDark or C.card,
+			Text = "",
+			LayoutOrder = i,
+		}, listFrame)
+		corner(item, 8)
+		label({
+			Text = rec.name,
+			Font = Enum.Font.GothamBold,
+			TextSize = 15,
+			Size = UDim2.new(1, -40, 0, 22),
+			Position = UDim2.fromOffset(10, 6),
+			TextTruncate = Enum.TextTruncate.AtEnd,
+		}, item)
+		label({
+			Text = string.format("⏱ %.1fs   •   %d pontos", rec.duration, #rec.frames),
+			TextSize = 12,
+			TextColor3 = C.sub,
+			Size = UDim2.new(1, -20, 0, 18),
+			Position = UDim2.fromOffset(10, 28),
+		}, item)
+		if i == selected then
+			label({
+				Text = "✔",
+				Font = Enum.Font.GothamBold,
+				TextSize = 18,
+				TextColor3 = C.green,
+				TextXAlignment = Enum.TextXAlignment.Right,
+				Size = UDim2.new(1, -12, 0, 22),
+				Position = UDim2.fromOffset(0, 6),
+			}, item)
+		end
+		item.MouseButton1Click:Connect(function()
+			if state ~= "idle" then
+				busyMessage()
+				return
+			end
+			selected = i
+			edit.rec = nil
+			renderList()
+			setMsg("Gravação «" .. rec.name .. "» selecionada. Na aba Reproduzir: [" .. keyName("goto") .. "] vai ao início e [" .. keyName("play") .. "] imita.", "ok")
+		end)
+	end
+	-- os guias visuais nunca podem atrapalhar o resto: qualquer erro aqui só vira aviso
+	local okMarker, errMarker = pcall(updateMarker)
+	if not okMarker then
+		warn("[Gravador] marcador: " .. tostring(errMarker))
+	end
+	local okPath, errPath = pcall(updatePath)
+	if not okPath then
+		warn("[Gravador] trajeto: " .. tostring(errPath))
+	end
+	local okCut, errCut = pcall(updateCutMarkers)
+	if not okCut then
+		warn("[Gravador] pontos A/B: " .. tostring(errCut))
+	end
+	if refreshEdit then
+		pcall(refreshEdit)
+	end
+	ui.anaDirty = true
+	if updateSummary then
+		pcall(updateSummary)
+	end
+end
+
+local function refreshKeys()
+	for id, btn in pairs(ui.keyBtns) do
+		if rebindingId == id then
+			btn.BackgroundColor3 = C.yellow
+			btn.Text = '<font color="rgb(40,30,0)">Pressione\numa tecla…</font>'
+		else
+			btn.BackgroundColor3 = C.panel
+			btn.Text = '<font size="10" color="rgb(150,158,180)">TECLA</font>\n' .. binds[id].Name
+		end
+	end
+end
+
+local function refreshHelp()
+	if ui.recHelp then
+		ui.recHelp.Text = table.concat({
+			"<b>Como gravar</b>",
+			"1. Posicione o personagem onde a gravação deve começar (parado e virado para a direção certa).",
+			"2. Pressione [" .. keyName("start") .. "] e faça o movimento.",
+			"3. Pressione [" .. keyName("stop") .. "], dê um nome e salve.",
+			"",
+			"<b>Como imitar</b> (aba Reproduzir)",
+			"Selecione a gravação na lista → [" .. keyName("goto") .. "] vai ao início → [" .. keyName("play") .. "] imita.",
+			"",
+			"<b>Ficou ruim só uma parte?</b> Use a aba «Regravar».",
+			"<b>Começar de outro lugar?</b> Aba «Regravar» → «Novo início».",
+			"<b>Trajeto tremido?</b> «Linhas mais retas», aqui na aba Gravar.",
+			"<b>Quer números e um mapa?</b> Veja a aba «Análise».",
+			"",
+			"<b>Liga / desliga</b>",
+			"O botão ⚡ no topo da janela desativa todos os atalhos (F, R, T, G…). Desligado, apertar as teclas não faz nada.",
+			"",
+			"<b>Fechar de vez</b>",
+			"O botão X no canto salva tudo e remove o script por completo.",
+		}, "\n")
+	end
+end
+
+local function refreshSettings()
+	if not ui.modeBtn then
+		return
+	end
+	if settings.mode == "tp" then
+		ui.modeBtn.Text = '<b>Teleporte</b>\n<font size="11" color="rgb(200,210,235)">preciso</font>'
+		ui.modeBtn.BackgroundColor3 = C.blueDark
+	else
+		ui.modeBtn.Text = '<b>Natural</b>\n<font size="11" color="rgb(230,215,255)">experimental</font>'
+		ui.modeBtn.BackgroundColor3 = C.purple
+	end
+	ui.tolLabel.Text = string.format("%.1f", settings.tolerance)
+	ui.markerBtn.Text = settings.marker and "Disco: ligado" or "Disco: desligado"
+	ui.markerBtn.BackgroundColor3 = settings.marker and C.green or C.panel
+	ui.pathBtn.Text = settings.path and "Trajeto: ligado" or "Trajeto: desligado"
+	ui.pathBtn.BackgroundColor3 = settings.path and C.green or C.panel
+	ui.guideModeBtn.Text = (settings.guideMode == "dummy") and "Guia: 🚶 boneco" or "Guia: 〜 linha"
+	ui.guideModeBtn.BackgroundColor3 = (settings.guideMode == "dummy") and C.purple or C.blueDark
+	ui.dummyIntLabel.Text = string.format("a cada %.1fs", settings.dummyInterval)
+	ui.autoBtn.Text = settings.autosave and "Auto-salvar: ligado" or "Auto-salvar: desligado"
+	ui.autoBtn.BackgroundColor3 = settings.autosave and C.green or C.panel
+	ui.stopCutBtn.Text = settings.stopAtCut and "Parar sozinho no B: sim" or "Parar sozinho no B: não"
+	ui.stopCutBtn.BackgroundColor3 = settings.stopAtCut and C.green or C.panel
+	ui.copyBtn.Text = settings.editCopy and "Resultado: nova cópia" or "Resultado: substituir"
+	ui.copyBtn.BackgroundColor3 = settings.editCopy and C.purple or C.blueDark
+	ui.freeBtn.Text = settings.editFree and "Início: onde estou" or "Início: ir ao ponto A"
+	ui.freeBtn.BackgroundColor3 = settings.editFree and C.teal or C.blueDark
+	ui.hideBtn.Text = settings.hideMini and "Botãozinho: escondido" or "Botãozinho: visível"
+	ui.hideBtn.BackgroundColor3 = settings.hideMini and C.purple or C.panel
+	ui.straightBtn.Text = settings.straighten and "Retas: ligado" or "Retas: desligado"
+	ui.straightBtn.BackgroundColor3 = settings.straighten and C.green or C.panel
+	ui.straightVal.Text = string.format("Força %.1f", settings.straightTol)
+	if settings.mode == "nat" then
+		ui.walkBtn.Text = "Sempre andando"
+		ui.walkBtn.BackgroundColor3 = C.purple
+	elseif settings.walkGoto then
+		ui.walkBtn.Text = "Ir andando"
+		ui.walkBtn.BackgroundColor3 = C.teal
+	else
+		ui.walkBtn.Text = "Teleportar"
+		ui.walkBtn.BackgroundColor3 = C.blueDark
+	end
+end
+
+refreshStoreInfo = function()
+	if not ui.saveDesc then
+		return
+	end
+	if canFile then
+		local when = store.lastSave and (" Último salvamento: " .. store.lastSave .. ".") or ""
+		ui.saveDesc.Text = "Arquivo local ✔ (jogo_" .. tostring(game.PlaceId) .. ".json)." .. when .. " Salva ao gravar, regravar, renomear, excluir, minimizar e ao sair."
+	else
+		ui.saveDesc.Text = "Sem acesso a arquivos neste ambiente (faltam writefile/readfile): as gravações ficam só na memória. Use «Exportar todas»."
+	end
+end
+
+local function updateInfo()
+	if not ui.infoLabel then
+		return
+	end
+	local rec = selected and recs[selected]
+	local _, _, root = getCharacter()
+	local lines = {}
+	if rec then
+		local st = getStats(rec)
+		lines[#lines + 1] = string.format("<b>Gravação:</b> %s  (%.1fs • %.0f studs • %d pulos)", esc(rec.name), rec.duration, st.length, st.jumps)
+		if root then
+			local d = (root.Position - rec.frames[1].cf.Position).Magnitude
+			if d <= settings.tolerance then
+				lines[#lines + 1] = string.format('<b>Distância do início:</b> <font color="rgb(60,190,115)">%.1f studs ✔ pronto para imitar</font>', d)
+			else
+				lines[#lines + 1] = string.format('<b>Distância do início:</b> <font color="rgb(232,84,84)">%.1f studs ✖ vá ao ponto inicial</font>', d)
+			end
+		else
+			lines[#lines + 1] = '<font color="rgb(232,84,84)">Personagem indisponível no momento.</font>'
+		end
+	else
+		lines[#lines + 1] = '<font color="rgb(245,190,70)">Nenhuma gravação selecionada.</font> Clique numa na lista da esquerda.'
+	end
+	local modeText = (settings.mode == "tp") and "Teleporte (preciso)" or "Natural (experimental)"
+	lines[#lines + 1] = string.format("<b>Modo:</b> %s    <b>Tolerância:</b> %.1f studs", modeText, settings.tolerance)
+	ui.infoLabel.Text = table.concat(lines, "\n")
+end
+
+local function updateEditInfo()
+	if not ui.editInfo then
+		return
+	end
+	local rec = ensureEdit()
+	if not rec then
+		ui.editInfo.Text = '<font color="rgb(245,190,70)">Nenhuma gravação selecionada.</font> Clique numa na lista da esquerda para escolher qual trecho refazer.'
+		return
+	end
+	local frames = rec.frames
+	local ia = frameIndexAt(frames, edit.a)
+	local ib = math.max(ia, frameIndexAt(frames, edit.b))
+	local ta, tb = frames[ia].t, frames[ib].t
+	local hasTail = ib < #frames
+	local lines = { string.format("<b>%s</b>  (%.1fs no total)", esc(rec.name), rec.duration) }
+	if ia > 1 then
+		lines[#lines + 1] = string.format('<font color="rgb(50,170,200)">Mantém o começo:</font> 0.0s → %.1fs', ta)
+	else
+		lines[#lines + 1] = '<font color="rgb(50,170,200)">Começo:</font> nada mantido (refaz desde o início)'
+	end
+	if hasTail then
+		lines[#lines + 1] = string.format("<b>Regrava:</b> %.1fs → %.1fs", ta, tb)
+		lines[#lines + 1] = string.format('<font color="rgb(245,190,70)">Mantém o final:</font> %.1fs → %.1fs', tb, rec.duration)
+	else
+		lines[#lines + 1] = string.format("<b>Regrava:</b> %.1fs → fim", ta)
+		lines[#lines + 1] = '<font color="rgb(245,190,70)">Final:</font> nada mantido (refaz até o fim)'
+	end
+	local _, _, root = getCharacter()
+	if state == "recording" and recTarget then
+		local extra = ""
+		if recTarget.join then
+			if recTarget.dist then
+				extra = string.format("   •   a %.1f studs do trajeto antigo (encosta com ≤ %.1f)", recTarget.dist, settings.tolerance)
+			end
+			lines[#lines + 1] = '<font color="rgb(232,84,84)"><b>● Gravando o novo início…</b></font>' .. extra
+		else
+			if recTarget.stopPos and root then
+				extra = string.format("   •   distância até o ponto B: %.1f studs", (root.Position - recTarget.stopPos).Magnitude)
+			end
+			lines[#lines + 1] = '<font color="rgb(232,84,84)"><b>● Regravando o trecho…</b></font>' .. extra
+		end
+	elseif root then
+		local d = (root.Position - frames[ia].cf.Position).Magnitude
+		local _, dPath = nearestIndex(getPts(rec), root.Position)
+		if settings.editFree then
+			lines[#lines + 1] = string.format('<font color="rgb(150,158,180)">Início livre • a %.1f studs do ponto A e a %.1f do trajeto.</font>', d, dPath)
+		else
+			lines[#lines + 1] = string.format('<font color="rgb(150,158,180)">A %.1f studs do ponto A e a %.1f studs do trajeto.</font>', d, dPath)
+		end
+	end
+	ui.editInfo.Text = table.concat(lines, "\n")
+end
+
+----------------------------------------------------------------------
+-- JANELA DE NOME (salvar / renomear) — fica sobre o jogo, mesmo com o painel minimizado
+----------------------------------------------------------------------
+local function openNameDialog(mode, rec)
+	ui.nameMode = mode
+	ui.renaming = rec
+	if mode == "rename" then
+		ui.nameTitle.Text = "✏ Renomear gravação"
+		ui.nameInfo.Text = "Nome atual: «" .. rec.name .. "»"
+		ui.nameBox.Text = rec.name
+		ui.nameSave.Text = "✔  Renomear (Enter)"
+		ui.nameCancel.Text = "Cancelar"
+	else
+		ui.nameTitle.Text = "💾 Salvar gravação"
+		ui.nameInfo.Text = string.format("Duração: %.1fs   •   %d pontos gravados", pending.duration, #pending.frames)
+		ui.nameBox.Text = "Gravação " .. (#recs + 1)
+		ui.nameSave.Text = "💾  Salvar (Enter)"
+		ui.nameCancel.Text = "Descartar"
+	end
+	ui.overlay.Visible = true
+	task.defer(function()
+		if ui.overlay.Visible then
+			ui.nameBox:CaptureFocus()
+		end
+	end)
+end
+
+local function closeNameDialog()
+	ui.overlay.Visible = false
+	ui.nameBox:ReleaseFocus()
+	ui.renaming = nil
+end
+
+local function confirmName()
+	if state ~= "naming" then
+		return
+	end
+	local name = ui.nameBox.Text:gsub("^%s+", ""):gsub("%s+$", "")
+
+	if ui.nameMode == "rename" then
+		local rec = ui.renaming
+		if not rec then
+			return
+		end
+		if name == "" then
+			name = rec.name
+		end
+		name = uniqueName(string.sub(name, 1, MAX_NOME), rec)
+		local old = rec.name
+		rec.name = name
+		closeNameDialog()
+		state = "idle"
+		setStatus("Pronto", C.green)
+		renderList()
+		markDirty(true)
+		setMsg("«" .. old .. "» agora se chama «" .. name .. "».", "ok")
+		return
+	end
+
+	if not pending then
+		return
+	end
+	if name == "" then
+		name = "Gravação " .. (#recs + 1)
+	end
+	name = string.sub(name, 1, MAX_NOME)
+	name = uniqueName(name)
+
+	local rec = { name = name, frames = pending.frames, duration = pending.duration }
+	table.insert(recs, rec)
+	selected = #recs
+	edit.rec = nil
+	pending = nil
+	closeNameDialog()
+	state = "idle"
+	setStatus("Pronto", C.green)
+	renderList()
+	markDirty(true)
+	setMsg("Gravação «" .. name .. "» salva e selecionada! Na aba Reproduzir: [" .. keyName("goto") .. "] vai ao início e [" .. keyName("play") .. "] imita.", "ok")
+end
+
+local function cancelName()
+	if state ~= "naming" then
+		return
+	end
+	local wasRename = (ui.nameMode == "rename")
+	pending = nil
+	closeNameDialog()
+	state = "idle"
+	setStatus("Pronto", C.green)
+	setMsg(wasRename and "Renomeação cancelada." or "Gravação descartada.", "info")
+end
+
+local function startRename()
+	if state ~= "idle" then
+		busyMessage()
+		return
+	end
+	local rec = selectedRec()
+	if not rec then
+		return
+	end
+	state = "naming"
+	setStatus("Renomeando", C.yellow)
+	openNameDialog("rename", rec)
+end
+
+local function duplicateRec()
+	if state ~= "idle" then
+		busyMessage()
+		return
+	end
+	local rec = selectedRec()
+	if not rec then
+		return
+	end
+	local base = rec.name
+	local cut = string.find(base, " (cópia)", 1, true)
+	if cut then
+		base = string.sub(base, 1, cut - 1) -- copiar uma cópia não empilha «(cópia) (cópia)»
+	end
+	local copy = {
+		name = uniqueName(string.sub(base, 1, MAX_NOME - 9) .. " (cópia)"),
+		frames = table.clone(rec.frames),
+		duration = rec.duration,
+		rows = rec.rows,
+		rowKeys = rec.rowKeys,
+	}
+	table.insert(recs, copy)
+	selected = #recs
+	edit.rec = nil
+	renderList()
+	markDirty(true)
+	setMsg("Cópia criada: «" .. copy.name .. "» (igual à original). Use «✏ Renomear» se quiser outro nome.", "ok")
+end
+
+----------------------------------------------------------------------
+-- GRAVAÇÃO
+----------------------------------------------------------------------
+-- animação principal do movimento: a de maior peso, preferindo as de prioridade Core (andar/pular padrão do Roblox)
+local function pickTrack(animator)
+	local best, bestScore = nil, 0.3
+	for _, tr in ipairs(animator:GetPlayingAnimationTracks()) do
+		local w = tr.WeightCurrent
+		if w >= 0.3 then
+			local score = w + ((tr.Priority == Enum.AnimationPriority.Core) and 10 or 0)
+			if score > bestScore then
+				best, bestScore = tr, score
+			end
+		end
+	end
+	return best
+end
+
+local function trackKey(tr)
+	local id = tr.Animation and tr.Animation.AnimationId or ""
+	if id ~= "" then
+		return id
+	end
+	return tr.Name
+end
+
+local function sample(root, hum)
+	recFrames[#recFrames + 1] = {
+		t = os.clock() - recStart,
+		cf = root.CFrame,
+		v = root.AssemblyLinearVelocity,
+		m = hum.MoveDirection,
+		j = hum:GetState() == Enum.HumanoidStateType.Jumping,
+	}
+	-- ritmo dos braços e pernas neste instante (para a imitação ficar igual)
+	if recAnimator then
+		local okA, tr = pcall(pickTrack, recAnimator)
+		if okA and tr then
+			local f = recFrames[#recFrames]
+			f.s = tr.Speed
+			f.k = trackKey(tr)
+		end
+	end
+end
+
+-- abort = true cancela uma regravação de trecho sem alterar nada
+local function stopRecording(reason, abort)
+	if state ~= "recording" then
+		setMsg("Não há nenhuma gravação em andamento.", "warn")
+		return
+	end
+	if recConn then
+		recConn:Disconnect()
+		recConn = nil
+	end
+	recTime = (#recFrames > 0) and recFrames[#recFrames].t or 0
+	local target = recTarget
+	if (target and abort) or #recFrames < 2 or recTime < 0.3 then
+		recTarget = nil
+		ui.cutDirty = true
+		state = "idle"
+		setStatus("Pronto", C.green)
+		if target and abort then
+			setMsg(reason or "Regravação cancelada. Nada foi alterado.", "warn")
+		elseif target then
+			setMsg("Trecho muito curto, foi descartado. Nada foi alterado.", "warn")
+		else
+			setMsg("Gravação muito curta, foi descartada. Tente de novo!", "warn")
+		end
+		return
+	end
+	local note = nil
+	if settings.straighten then
+		local nf, maxShift = straightenFrames(recFrames, settings.straightTol)
+		if nf and maxShift > 0.05 then
+			recFrames = nf
+			note = string.format(" Linhas retas aplicadas (desvio máximo de %.2f studs).", maxShift)
+		end
+	end
+	if target then
+		finishEdit(recFrames, note)
+		return
+	end
+	state = "naming"
+	pending = { frames = recFrames, duration = recTime }
+	setStatus("Aguardando nome", C.yellow)
+	setMsg((reason or "Gravação parada! Dê um nome para salvar.") .. (note or ""), "info")
+	openNameDialog("save")
+end
+
+local function beginRecording(target)
+	if state ~= "idle" then
+		busyMessage()
+		return
+	end
+	local _, hum, root = getCharacter()
+	if not root then
+		setMsg("Seu personagem não está pronto (ou está morto).", "err")
+		return
+	end
+	recFrames = {}
+	recStart = os.clock()
+	recTime = 0
+	recTarget = target
+	recAnimator = hum:FindFirstChildOfClass("Animator")
+	sample(root, hum)
+	state = "recording"
+	recConn = RunService.Heartbeat:Connect(function()
+		local _, h, r = getCharacter()
+		if not r then
+			stopRecording("Seu personagem foi removido — " .. (recTarget and "a regravação foi cancelada e nada foi alterado." or "a gravação foi encerrada."), true)
+			return
+		end
+		sample(r, h)
+		local el = os.clock() - recStart
+		local tg = recTarget
+		if tg then
+			if tg.join then
+				local _, dist = nearestIndex(tg.pts, r.Position)
+				tg.dist = dist
+				if dist <= settings.tolerance and el > 0.4 then
+					stopRecording("Encostou no trajeto antigo — juntando os dois!")
+					return
+				end
+			elseif tg.stopPos and settings.stopAtCut then
+				local d = (r.Position - tg.stopPos).Magnitude
+				if not tg.armed and d > settings.tolerance + 1.5 then
+					tg.armed = true
+				end
+				if tg.armed and d <= settings.tolerance then
+					stopRecording("Chegou no ponto B — trecho gravado!")
+					return
+				end
+			end
+			setStatus(string.format("● Regravando  %.1fs", el), C.red)
+		else
+			setStatus(string.format("● Gravando  %.1fs", el), C.red)
+		end
+	end)
+	if target and target.join then
+		setStatus("● Novo início  0.0s", C.red)
+		setMsg("Gravando o novo início! Ande até ENCOSTAR no trajeto antigo: a gravação para sozinha e os dois se juntam (ou pressione [" .. keyName("stop") .. "]).", "ok")
+	elseif target then
+		local how = (target.stopPos and settings.stopAtCut) and (" Para sozinho ao chegar no ponto B (ou pressione [" .. keyName("stop") .. "]).") or (" Pressione [" .. keyName("stop") .. "] para terminar.")
+		setStatus("● Regravando  0.0s", C.red)
+		setMsg("Regravando o trecho! Faça o movimento." .. how, "ok")
+	else
+		setStatus("● Gravando  0.0s", C.red)
+		setMsg("Gravando! Ande, pule e gire à vontade. Pressione [" .. keyName("stop") .. "] para parar.", "ok")
+	end
+end
+
+local function startRecording()
+	beginRecording(nil)
+end
+
+local function stopRecordingAction()
+	stopRecording()
+end
+
+----------------------------------------------------------------------
+-- IR AO PONTO INICIAL / POSICIONAR
+----------------------------------------------------------------------
+local function reportDistance(rec)
+	local _, _, r = getCharacter()
+	if not r then
+		setMsg("Seu personagem não está disponível.", "err")
+		return
+	end
+	local d = (r.Position - rec.frames[1].cf.Position).Magnitude
+	if d <= settings.tolerance then
+		setMsg(string.format("Você está no ponto inicial de «%s» (a %.1f studs). Pressione [%s] para iniciar a imitação.", rec.name, d, keyName("play")), "ok")
+	elseif settings.mode == "tp" and not settings.walkGoto then
+		setMsg(string.format("O jogo te levou de volta: você está a %.1f studs do início. Provável anti-teleporte — em Ajustes, troque para o modo Natural.", d), "err")
+	else
+		setMsg(string.format("Não consegui chegar ao início (a %.1f studs). Pode haver obstáculo ou diferença de altura.", d), "err")
+	end
+end
+
+-- ===== andar até o ponto: calcula a rota INTEIRA primeiro, depois anda sem recalcular =====
+function geo.horizDist(a, b)
+	return Vector3.new(a.X - b.X, 0, a.Z - b.Z).Magnitude
+end
+
+-- vai até 'target' em linha reta (um só ponto); se ficar parado perto de algo, pula. Devolve true se chegou.
+function geo.moveStep(target, timeout, reach)
+	local t0 = os.clock()
+	local lastMove = -math.huge
+	local lastPos, stuck = nil, 0
+	while state == "walking" and os.clock() - t0 < timeout do
+		local _, h, r = getCharacter()
+		if not r then
+			return false
+		end
+		if geo.horizDist(r.Position, target) <= reach then
+			return true
+		end
+		if os.clock() - lastMove > 5 then -- o MoveTo expira em ~8s: renova
+			h:MoveTo(target)
+			lastMove = os.clock()
+		end
+		if lastPos and (r.Position - lastPos).Magnitude < 0.2 then
+			stuck += 1
+			if stuck >= 4 then -- ~0,4s parado: tenta pular o obstáculo
+				h.Jump = true
+				stuck = 0
+			end
+		else
+			stuck = 0
+		end
+		lastPos = r.Position
+		task.wait(0.1)
+	end
+	return false
+end
+
+-- anda por uma lista de pontos JÁ CALCULADA, sem recalcular nada no meio (isso evita a travadinha):
+-- troca para o próximo ponto um pouco ANTES de chegar no atual, para não parar e arrancar de novo a
+-- cada ponto. Pula sozinho se ficar preso contra algo. Devolve true se chegou no último ponto.
+function geo.moveAlongPath(points, timeout)
+	local t0 = os.clock()
+	local i = 1
+	local lastPos, stuck = nil, 0
+	local _, h = getCharacter()
+	if not h then
+		return false
+	end
+	h:MoveTo(points[1])
+	while state == "walking" and os.clock() - t0 < timeout do
+		local _, h2, r2 = getCharacter()
+		if not r2 then
+			return false
+		end
+		local d = geo.horizDist(r2.Position, points[i])
+		if i == #points then
+			if d <= 1 then
+				return true
+			end
+		elseif d <= 3.5 then -- "larga a mão" um pouco antes de chegar: segue pro próximo sem parar de vez
+			i += 1
+			h2:MoveTo(points[i])
+		end
+		if lastPos and (r2.Position - lastPos).Magnitude < 0.2 then
+			stuck += 1
+			if stuck >= 4 then -- ~0,4s parado: tenta pular o obstáculo
+				h2.Jump = true
+				stuck = 0
+			end
+		else
+			stuck = 0
+		end
+		lastPos = r2.Position
+		task.wait(0.1)
+	end
+	return false
+end
+
+-- calcula a rota inteira até o ponto (contornando o que estiver no caminho) e só então anda por ela,
+-- de uma vez, sem recalcular. Sem rota encontrada: tenta ir direto mesmo assim, pulando o que puder.
+function geo.walkRoute(goalCF, onPlanned)
+	local _, _, r = getCharacter()
+	if not r then
+		return false
+	end
+	local down = Vector3.new(0, footOffset(), 0)
+	local path = PathfindingService:CreatePath({ AgentRadius = 2, AgentHeight = 5, AgentCanJump = true, WaypointSpacing = 4 })
+	local okCompute = pcall(function()
+		path:ComputeAsync(r.Position - down, goalCF.Position - down)
+	end)
+	if state ~= "walking" then
+		return false
+	end
+	if okCompute and path.Status == Enum.PathStatus.Success then
+		local pts = {}
+		for _, wp in ipairs(path:GetWaypoints()) do
+			pts[#pts + 1] = wp.Position
+		end
+		if #pts > 0 then
+			if onPlanned then
+				onPlanned(#pts)
+			end
+			return geo.moveAlongPath(pts, 45)
+		end
+	end
+	-- sem rota (ou PathfindingService indisponível neste ambiente): tenta ir direto mesmo assim
+	if onPlanned then
+		onPlanned(nil)
+	end
+	return geo.moveStep(goalCF.Position, 45, 0.6)
+end
+-- anda até a posição de um CFrame e chama onArrive(chegou) quando terminar
+local function walkToCF(cf, onArrive)
+	state = "walking"
+	setStatus("🧭 Calculando a rota", C.teal)
+	setMsg("Calculando a rota até o ponto… ([" .. keyName("stopplay") .. "] cancela)", "info")
+	task.spawn(function()
+		local okW, errW = pcall(geo.walkRoute, cf, function(numPts)
+			if state ~= "walking" then
+				return
+			end
+			setStatus("🚶 Indo ao ponto", C.teal)
+			if numPts then
+				setMsg(string.format("Rota encontrada (%d pontos)! Indo até lá, contornando o que estiver no caminho. ([%s] cancela)", numPts, keyName("stopplay")), "info")
+			else
+				setMsg("Não achei uma rota contornando; indo direto mesmo assim, pulando o que puder. ([" .. keyName("stopplay") .. "] cancela)", "warn")
+			end
+		end)
+		if not okW then
+			warn("[Gravador] caminhada: " .. tostring(errW))
+		end
+		if state ~= "walking" then
+			return
+		end
+		state = "idle"
+		setStatus("Pronto", C.green)
+		local _, h2, r2 = getCharacter()
+		if not r2 then
+			setMsg("Seu personagem não está disponível.", "err")
+			return
+		end
+		h2:Move(Vector3.zero, false)
+		h2:MoveTo(r2.Position) -- para de andar
+		local arrived = geo.horizDist(r2.Position, cf.Position) <= 1.5
+		r2.CFrame = CFrame.new(r2.Position) * cf.Rotation -- só ajusta a direção do olhar
+		task.wait(0.2)
+		if state == "idle" and onArrive then
+			onArrive(arrived)
+		end
+	end)
+end
+local function goToStart()
+	if state ~= "idle" then
+		busyMessage()
+		return
+	end
+	local rec = selectedRec()
+	if not rec then
+		return
+	end
+	local _, hum, root = getCharacter()
+	if not root then
+		setMsg("Seu personagem não está pronto.", "err")
+		return
+	end
+	if settings.mode == "nat" or settings.walkGoto then
+		walkToCF(rec.frames[1].cf, function()
+			reportDistance(rec)
+		end)
+		return
+	end
+	hum.Sit = false
+	root.CFrame = rec.frames[1].cf
+	root.AssemblyLinearVelocity = Vector3.zero
+	root.AssemblyAngularVelocity = Vector3.zero
+	setMsg("Teleportando para o ponto inicial…", "info")
+	task.delay(0.3, function()
+		if state == "idle" then
+			reportDistance(rec)
+		end
+	end)
+end
+
+-- leva o personagem até uma pose, faz a contagem 3-2-1 e chama onReady
+local function prepareAt(cf, vel, text, onReady, stay)
+	local _, hum, root = getCharacter()
+	if not root then
+		setMsg("Seu personagem não está pronto.", "err")
+		return
+	end
+	local function countdown()
+		state = "countdown"
+		ui.countHint.Text = "[" .. keyName("stopplay") .. "] cancela"
+		setMsg(string.format("%s Contagem de %d segundos: quando aparecer VAI!, comece a andar.  ([%s] cancela)", text, COUNTDOWN, keyName("stopplay")), "info")
+		for n = COUNTDOWN, 1, -1 do
+			if state ~= "countdown" then
+				return
+			end
+			setStatus("⏳ Começa em " .. n, C.yellow)
+			showCount(tostring(n), "Prepare-se! Quando aparecer VAI!, comece a andar.", C.yellow, 120)
+			task.wait(1)
+		end
+		if state ~= "countdown" then
+			return
+		end
+		local _, _, r = getCharacter()
+		if not r then
+			state = "idle"
+			hideCount()
+			setStatus("Pronto", C.green)
+			setMsg("Seu personagem não está disponível.", "err")
+			return
+		end
+		r.Anchored = false
+		if settings.mode == "tp" and not stay then
+			r.AssemblyLinearVelocity = vel -- continua com o embalo que tinha nesse ponto
+		end
+		state = "idle"
+		showCount("VAI!", "Pode andar! A regravação já começou.", C.green, 72)
+		hideCount(1.1)
+		onReady()
+	end
+	if stay then
+		state = "countdown" -- sem teleporte: só a contagem, no lugar onde você está
+		task.spawn(countdown)
+	elseif settings.mode == "tp" and not settings.walkGoto then
+		hum.Sit = false
+		root.CFrame = cf
+		root.AssemblyLinearVelocity = Vector3.zero
+		root.AssemblyAngularVelocity = Vector3.zero
+		root.Anchored = true -- fica parado durante a contagem
+		state = "countdown"
+		task.spawn(countdown)
+	else
+		walkToCF(cf, function(arrived)
+			if not arrived then
+				setMsg("Não consegui chegar ao ponto (obstáculo grande ou sem caminho). Tente de novo, ou use o Teleporte / «Início: onde estou».", "err")
+				return
+			end
+			countdown()
+		end)
+	end
+end
+
+----------------------------------------------------------------------
+-- IMITAÇÃO
+----------------------------------------------------------------------
+local function endPlayback(text, kind)
+	if playConn then
+		playConn:Disconnect()
+		playConn = nil
+	end
+	if playConn2 then
+		playConn2:Disconnect()
+		playConn2 = nil
+	end
+	if playConn3 then
+		playConn3:Disconnect()
+		playConn3 = nil
+	end
+	if playHum and playHum.Parent then
+		playHum.AutoRotate = playOldAuto
+	end
+	playHum = nil
+	setControls(true)
+	local _, hum = getCharacter()
+	if hum then
+		hum:Move(Vector3.zero, false)
+	end
+	state = "idle"
+	setStatus("Pronto", C.green)
+	setMsg(text, kind)
+end
+
+local function startPlayback()
+	if state ~= "idle" then
+		busyMessage()
+		return
+	end
+	local rec = selectedRec()
+	if not rec then
+		return
+	end
+	local _, hum, root = getCharacter()
+	if not root then
+		setMsg("Seu personagem não está pronto.", "err")
+		return
+	end
+
+	local frames = rec.frames
+	local dist = (root.Position - frames[1].cf.Position).Magnitude
+	if dist > settings.tolerance then
+		setMsg(string.format("Você está a %.1f studs do ponto inicial (máximo %.1f). Pressione [%s] para ir ao local certo.", dist, settings.tolerance, keyName("goto")), "err")
+		return
+	end
+
+	state = "playing"
+	setControls(false)
+	playHum = hum
+	playOldAuto = hum.AutoRotate
+	hum.AutoRotate = false
+	setMsg("Imitando «" .. rec.name .. "»… Para interromper, pressione [" .. keyName("stopplay") .. "].", "ok")
+
+	local startClock = os.clock()
+	local idx, pendingJump, badTime, lastT = 1, false, 0, 0
+	local lastApplied = frames[1].cf
+	local total = frames[#frames].t
+
+	-- devolve a pose gravada no instante t (interpolada entre dois frames)
+	local function evaluate(t)
+		while idx < #frames and frames[idx + 1].t <= t do
+			idx += 1
+			if frames[idx].j and not frames[idx - 1].j then
+				pendingJump = true
+			end
+		end
+		local a, b = frames[idx], frames[idx + 1]
+		if not b then
+			return a.cf, Vector3.zero, Vector3.zero, true
+		end
+		local alpha = math.clamp((t - a.t) / math.max(b.t - a.t, 1e-6), 0, 1)
+		return a.cf:Lerp(b.cf, alpha), a.v:Lerp(b.v, alpha), a.m, false
+	end
+
+	local function step(isPre)
+		if state ~= "playing" then
+			return
+		end
+		if not isPre and settings.mode ~= "tp" then
+			return
+		end
+		local _, h, r = getCharacter()
+		if not r then
+			endPlayback("A imitação foi interrompida: seu personagem foi removido.", "warn")
+			return
+		end
+		local t = os.clock() - startClock
+		local cf, vel, moveDir, finished = evaluate(t)
+
+		if isPre then
+			if settings.mode == "tp" then
+				-- se o jogo desfaz nosso teleporte por muito tempo, avisa em vez de insistir
+				if (r.Position - lastApplied.Position).Magnitude > 12 then
+					badTime += (t - lastT)
+				else
+					badTime = 0
+				end
+				if badTime > 0.4 then
+					endPlayback("O jogo está desfazendo o teleporte (anti-cheat?). Em Ajustes, troque para o modo Natural.", "err")
+					return
+				end
+			end
+			lastT = t
+			setStatus(string.format("▶ Imitando %.1f/%.1fs", math.min(t, total), total), C.blue)
+		end
+
+		if settings.mode == "tp" then
+			r.CFrame = cf
+			r.AssemblyLinearVelocity = finished and Vector3.zero or vel
+			r.AssemblyAngularVelocity = Vector3.zero
+			lastApplied = cf
+		else
+			local err = cf.Position - r.Position
+			if err.Magnitude > 10 then
+				r.CFrame = cf
+				r.AssemblyLinearVelocity = vel
+			else
+				r.CFrame = CFrame.new(r.Position) * cf.Rotation
+				r.AssemblyLinearVelocity = vel + err * 10
+			end
+		end
+
+		if isPre then
+			h:Move(moveDir, false)
+			if pendingJump then
+				pendingJump = false
+				h:ChangeState(Enum.HumanoidStateType.Jumping)
+			end
+		end
+
+		if finished then
+			endPlayback("Imitação de «" .. rec.name .. "» concluída!", "ok")
+		end
+	end
+
+	local function guarded(isPre)
+		local ok, err = pcall(step, isPre)
+		if not ok then
+			warn("[Gravador] " .. tostring(err))
+			endPlayback("Erro durante a imitação: " .. tostring(err), "err")
+		end
+	end
+
+	playConn = RunService.PreSimulation:Connect(function()
+		guarded(true)
+	end)
+	playConn2 = RunService.Heartbeat:Connect(function()
+		guarded(false)
+	end)
+
+	-- ritmo da animação: braços e pernas seguem o mesmo ritmo de quando você gravou
+	local animator = hum:FindFirstChildOfClass("Animator")
+	if animator then
+		local function applyAnim(f)
+			if f.s and f.k then
+				for _, tr in ipairs(animator:GetPlayingAnimationTracks()) do
+					if trackKey(tr) == f.k and math.abs(tr.Speed - f.s) > 0.01 then
+						tr:AdjustSpeed(f.s)
+					end
+				end
+			elseif not f.j and math.abs(f.v.Y) < 3 then
+				-- gravação antiga (sem o ritmo anotado): regra padrão do Roblox, velocidade ÷ 16
+				local sp = math.sqrt(f.v.X * f.v.X + f.v.Z * f.v.Z)
+				if sp > 0.75 then
+					local tr = pickTrack(animator)
+					local want = sp / 16
+					if tr and math.abs(tr.Speed - want) > 0.02 then
+						tr:AdjustSpeed(want)
+					end
+				end
+			end
+		end
+		playConn3 = RunService.RenderStepped:Connect(function()
+			if state ~= "playing" or not animator.Parent then
+				return
+			end
+			local f = frames[idx]
+			if f then
+				pcall(applyAnim, f)
+			end
+		end)
+	end
+	setStatus("▶ Imitando", C.blue)
+end
+
+local function stopPlayback()
+	if state == "playing" then
+		endPlayback("Imitação interrompida.", "warn")
+	elseif state == "walking" then
+		state = "idle"
+		local _, h, r = getCharacter()
+		if h and r then
+			h:MoveTo(r.Position)
+		end
+		setStatus("Pronto", C.green)
+		setMsg("Caminhada cancelada.", "warn")
+	elseif state == "countdown" then
+		state = "idle"
+		hideCount()
+		local _, _, r = getCharacter()
+		if r then
+			r.Anchored = false
+		end
+		setStatus("Pronto", C.green)
+		setMsg("Contagem cancelada. Nada foi alterado.", "warn")
+	else
+		setMsg("Nenhuma imitação está rodando agora.", "info")
+	end
+end
+
+----------------------------------------------------------------------
+-- EXPORTAR / IMPORTAR
+----------------------------------------------------------------------
+local function closeIO()
+	if state ~= "io" then
+		return
+	end
+	ui.ioOverlay.Visible = false
+	ui.ioBox.Text = ""
+	state = "idle"
+end
+
+local function fillExport()
+	if ui.ioAll then
+		ui.ioTitle.Text = "📤 Exportar todas (" .. #recs .. ")"
+		ui.ioBox.Text = encodeAll()
+		ui.ioToggle.Text = "📄 Só a selecionada"
+	else
+		local rec = recs[selected]
+		ui.ioTitle.Text = "📤 Exportar «" .. rec.name .. "»"
+		ui.ioBox.Text = recJSON(rec)
+		ui.ioToggle.Text = "📚 Exportar todas"
+	end
+end
+
+local function openIO(mode)
+	if state ~= "idle" then
+		busyMessage()
+		return
+	end
+	if mode == "export" then
+		if #recs == 0 then
+			setMsg("Não há gravações para exportar ainda.", "warn")
+			return
+		end
+		ui.ioAll = not (selected and recs[selected])
+	end
+	state = "io"
+	ui.ioMode = mode
+	if mode == "export" then
+		ui.ioHelp.Text = "Clique em «Selecionar tudo», copie com Ctrl+C e guarde o texto (num bloco de notas, por exemplo). Para recuperar, use «Importar» e cole o texto."
+		ui.ioAction.Text = "🔎  Selecionar tudo"
+		ui.ioAction.BackgroundColor3 = C.blue
+		ui.ioToggle.Visible = true
+		fillExport()
+	else
+		ui.ioTitle.Text = "📥 Importar gravação(ões)"
+		ui.ioHelp.Text = "Cole abaixo o texto exportado antes (uma gravação ou todas) e clique em «Importar»."
+		ui.ioBox.Text = ""
+		ui.ioAction.Text = "📥  Importar"
+		ui.ioAction.BackgroundColor3 = C.green
+		ui.ioToggle.Visible = false
+	end
+	ui.ioOverlay.Visible = true
+end
+
+local function runIOAction()
+	if ui.ioMode == "export" then
+		ui.ioBox:CaptureFocus()
+		task.defer(function()
+			ui.ioBox.SelectionStart = 1
+			ui.ioBox.CursorPosition = #ui.ioBox.Text + 1
+		end)
+		return
+	end
+	local okJ, data = pcall(function()
+		return HttpService:JSONDecode(ui.ioBox.Text)
+	end)
+	if not okJ or type(data) ~= "table" then
+		setMsg("Esse texto não é uma gravação válida. Cole o texto completo, exatamente como foi exportado.", "err")
+		return
+	end
+	local list, failed = {}, 0
+	if type(data.recs) == "table" then
+		for i, d in ipairs(data.recs) do
+			local ok, rec = pcall(decodeRecTable, d, "Importada " .. i)
+			if ok and rec then
+				list[#list + 1] = rec
+			else
+				failed += 1
+			end
+		end
+	else
+		local ok, rec = pcall(decodeRecTable, data, "Importada")
+		if ok and rec then
+			list[1] = rec
+		else
+			failed += 1
+		end
+	end
+	if #list == 0 then
+		setMsg("Esse texto não é uma gravação válida. Cole o texto completo, exatamente como foi exportado.", "err")
+		return
+	end
+	for _, rec in ipairs(list) do
+		rec.name = uniqueName(string.sub(rec.name, 1, MAX_NOME))
+		table.insert(recs, rec)
+	end
+	selected = #recs
+	edit.rec = nil
+	closeIO()
+	renderList()
+	markDirty(true)
+	setStatus("Pronto", C.green)
+	local extra = (failed > 0) and (" (" .. failed .. " não puderam ser lidas)") or ""
+	if #list == 1 then
+		setMsg("Gravação «" .. list[1].name .. "» importada e selecionada!" .. extra, "ok")
+	else
+		setMsg(#list .. " gravações importadas!" .. extra, "ok")
+	end
+end
+
+----------------------------------------------------------------------
+-- MINIMIZAR / MOSTRAR
+----------------------------------------------------------------------
+local function applyMiniVisibility()
+	local show = ui.minimized and not settings.hideMini
+	if ui.mini then
+		ui.mini.Visible = show
+	end
+	if ui.miniPower then
+		ui.miniPower.Visible = show
+	end
+end
+
+local function setMinimized(value)
+	if value and state == "io" then
+		closeIO()
+	end
+	ui.minimized = value
+	ui.main.Visible = not value
+	applyMiniVisibility()
+	if value and store.dirty then
+		markDirty(true) -- ao fechar o painel, salva o que estiver pendente
+	end
+	if value and settings.hideMini then
+		setMsg("Painel escondido. Pressione [" .. keyName("toggle") .. "] para abrir de novo.", "info")
+	end
+end
+
+local function toggleGui()
+	setMinimized(not ui.minimized)
+end
+
+----------------------------------------------------------------------
+-- LIGAR / DESLIGAR O SISTEMA
+----------------------------------------------------------------------
+local function refreshPower()
+	if ui.powerBtn then
+		ui.powerBtn.Text = enabled and "⚡ Ligado" or "⚡ Desligado"
+		ui.powerBtn.BackgroundColor3 = enabled and C.green or C.red
+	end
+	if ui.miniPower then
+		ui.miniPower.BackgroundColor3 = enabled and C.green or C.red
+	end
+	if ui.mini then
+		ui.mini.BackgroundColor3 = enabled and C.blue or C.panel
+	end
+	setStatus("Pronto", C.green) -- (mostra «Desligado» sozinho quando estiver desligado)
+end
+
+local function setEnabled(value)
+	if value == enabled then
+		return
+	end
+	if not value then
+		if state == "playing" or state == "walking" or state == "countdown" then
+			stopPlayback() -- para o que estiver rodando antes de desligar
+		elseif state ~= "idle" then
+			busyMessage()
+			return
+		end
+	end
+	enabled = value
+	rebindingId = nil
+	refreshKeys()
+	refreshPower()
+	pcall(updateMarker)
+	pcall(updatePath)
+	pcall(updateCutMarkers)
+	if enabled then
+		setMsg("Sistema ligado! Os atalhos voltaram a funcionar.", "ok")
+	else
+		local extra = settings.hideMini and (" Só a tecla [" .. keyName("toggle") .. "] continua funcionando, para você poder abrir o painel.") or ""
+		setMsg("Sistema desligado: nenhuma tecla do gravador funciona e os guias sumiram do mundo. Clique em «⚡ Desligado» para ligar de novo." .. extra, "warn")
+	end
+end
+
+----------------------------------------------------------------------
+-- REGRAVAR UM TRECHO
+----------------------------------------------------------------------
+-- monta a gravação nova: começo mantido + trecho novo + final mantido
+local function mergeFrames(old, ia, ib, hasTail, new, free)
+	local out = {}
+	local t0
+	if free then
+		-- começou de onde estava: mantém o ponto A e desliza até o primeiro frame do trecho novo
+		if ia > 1 then
+			for i = 1, ia do
+				out[#out + 1] = old[i]
+			end
+			local gap = (old[ia].cf.Position - new[1].cf.Position).Magnitude
+			t0 = old[ia].t + ((gap < 0.25) and (1 / 60) or math.clamp(gap / 20, 0.05, 2))
+		else
+			t0 = 0
+		end
+	else
+		for i = 1, ia - 1 do
+			out[#out + 1] = old[i]
+		end
+		t0 = old[ia].t
+	end
+	for _, f in ipairs(new) do
+		out[#out + 1] = { t = t0 + f.t, cf = f.cf, v = f.v, m = f.m, j = f.j, s = f.s, k = f.k }
+	end
+	if hasTail then
+		local last = out[#out]
+		local gap = (last.cf.Position - old[ib].cf.Position).Magnitude
+		local gapT = (gap < 0.25) and (1 / 60) or math.clamp(gap / 20, 0.05, 2)
+		local shift = last.t + gapT - old[ib].t
+		for j = ib, #old do
+			local f = old[j]
+			out[#out + 1] = { t = f.t + shift, cf = f.cf, v = f.v, m = f.m, j = f.j, s = f.s, k = f.k }
+		end
+	end
+	return out
+end
+
+finishEdit = function(newFrames, note)
+	local t = recTarget
+	recTarget = nil
+	ui.cutDirty = true
+	local rec = t.rec
+	local joinT = nil
+	if t.join then
+		-- em que ponto do trajeto antigo o novo início encostou? (frame mais próximo do último ponto gravado)
+		t.ib = nearestIndex(t.pts, newFrames[#newFrames].cf.Position)
+		t.hasTail = t.ib < #rec.frames
+		joinT = rec.frames[t.ib].t
+	end
+	local last = newFrames[#newFrames]
+	local gap = t.hasTail and (last.cf.Position - rec.frames[t.ib].cf.Position).Magnitude or 0
+	local headGap = (t.free and t.ia > 1) and (rec.frames[t.ia].cf.Position - newFrames[1].cf.Position).Magnitude or 0
+	local out = mergeFrames(rec.frames, t.ia, t.ib, t.hasTail, newFrames, t.free)
+	local dur = out[#out].t
+	local name = rec.name
+	if settings.editCopy then
+		local copy = {
+			name = uniqueName(string.sub(rec.name, 1, MAX_NOME - 10) .. " (editada)"),
+			frames = out,
+			duration = dur,
+		}
+		table.insert(recs, copy)
+		selected = #recs
+		name = copy.name
+	else
+		rec.undo = { frames = rec.frames, duration = rec.duration }
+		rec.frames = out
+		rec.duration = dur
+		rec.rows = nil
+		rec.stats = nil
+		rec.pts = nil
+	end
+	edit.rec = nil
+	state = "idle"
+	setStatus("Pronto", C.green)
+	renderList()
+	markDirty(true)
+	local msg
+	if t.join then
+		msg = string.format("Novo início encaixado no trajeto antigo (aos %.1fs dele)! «%s» agora tem %.1fs. ", joinT, name, dur)
+	else
+		msg = string.format("Trecho regravado! «%s» agora tem %.1fs. ", name, dur)
+	end
+	msg ..= settings.editCopy and "Foi salvo como cópia; a original continua igual." or "Se não gostou, use «Desfazer»."
+	msg ..= note or ""
+	local attention = false
+	if headGap > 6 then
+		msg ..= string.format(" Atenção: você começou a %.1f studs do ponto A; na imitação o personagem desliza até o trecho novo.", headGap)
+		attention = true
+	end
+	if gap > 6 then
+		msg ..= string.format(" Atenção: você parou a %.1f studs " .. (t.join and "do trajeto antigo" or "do ponto B") .. "; na imitação o personagem desliza até lá.", gap)
+		attention = true
+	end
+	setMsg(msg, attention and "warn" or "ok")
+end
+
+local function startEditRecording()
+	if state ~= "idle" then
+		busyMessage()
+		return
+	end
+	local rec = selectedRec()
+	if not rec then
+		return
+	end
+	local _, _, root = getCharacter()
+	if not root then
+		setMsg("Seu personagem não está pronto.", "err")
+		return
+	end
+	ensureEdit()
+	local frames = rec.frames
+	local ia = frameIndexAt(frames, edit.a)
+	local ib = math.max(ia, frameIndexAt(frames, edit.b))
+	local hasTail = ib < #frames
+	local target = {
+		rec = rec,
+		ia = ia,
+		ib = ib,
+		hasTail = hasTail,
+		stopPos = hasTail and frames[ib].cf.Position or nil,
+		armed = false,
+		free = settings.editFree,
+	}
+	local text
+	if settings.editFree then
+		text = "Sem teleporte: a regravação começa de onde você está."
+	elseif ia == 1 then
+		text = "Posicionado no início original."
+	else
+		text = string.format("Posicionado no ponto A (%.1fs).", frames[ia].t)
+	end
+	prepareAt(frames[ia].cf, frames[ia].v, text, function()
+		beginRecording(target)
+	end, settings.editFree)
+end
+
+-- grava um NOVO começo a partir de onde você está; ao encostar no trajeto antigo, os dois se juntam
+local function startJoinRecording()
+	if state ~= "idle" then
+		busyMessage()
+		return
+	end
+	local rec = selectedRec()
+	if not rec then
+		return
+	end
+	local _, _, root = getCharacter()
+	if not root then
+		setMsg("Seu personagem não está pronto.", "err")
+		return
+	end
+	local pts = getPts(rec)
+	local _, nearest = nearestIndex(pts, root.Position)
+	if nearest <= settings.tolerance then
+		setMsg(string.format("Você está em cima do trajeto antigo (a %.1f studs). Vá até o NOVO ponto inicial, fora do trajeto (a mais de %.1f studs dele), e tente de novo.", nearest, settings.tolerance), "warn")
+		return
+	end
+	local target = {
+		rec = rec,
+		ia = 1,
+		ib = #rec.frames,
+		hasTail = true,
+		join = true,
+		free = true,
+		pts = pts,
+		armed = false,
+	}
+	local text = "Novo início a partir de onde você está: ande até encostar no trajeto antigo."
+	if not settings.path then
+		text ..= " (Dica: ligue «Trajeto» em Ajustes para ver o caminho antigo.)"
+	end
+	prepareAt(root.CFrame, Vector3.zero, text, function()
+		beginRecording(target)
+	end, true)
+end
+
+-- guarda o resultado de uma edição: substitui (com Desfazer) ou cria uma cópia, conforme a opção escolhida
+local function commitFrames(rec, frames, suffix)
+	local dur = frames[#frames].t
+	local name = rec.name
+	if settings.editCopy then
+		local copy = {
+			name = uniqueName(string.sub(rec.name, 1, MAX_NOME - #suffix) .. suffix),
+			frames = frames,
+			duration = dur,
+		}
+		table.insert(recs, copy)
+		selected = #recs
+		name = copy.name
+	else
+		rec.undo = { frames = rec.frames, duration = rec.duration }
+		rec.frames = frames
+		rec.duration = dur
+		rec.rows = nil
+		rec.stats = nil
+		rec.pts = nil
+	end
+	edit.rec = nil
+	renderList()
+	markDirty(true)
+	return name
+end
+
+-- «linhas retas» numa gravação que já existe
+local function straightenSelected()
+	if state ~= "idle" then
+		busyMessage()
+		return
+	end
+	local rec = selectedRec()
+	if not rec then
+		return
+	end
+	local nf, maxShift, before, after = straightenFrames(rec.frames, settings.straightTol)
+	if not nf or maxShift < 0.05 then
+		setMsg("Essa gravação já está reta para essa força — nada mudou. Aumente a força para alisar mais.", "info")
+		return
+	end
+	local name = commitFrames(rec, nf, " (reta)")
+	setMsg(string.format("Linhas retas aplicadas em «%s»: desvio máximo %.2f studs, percurso de %.0f para %.0f studs.%s", name, maxShift, before, after, settings.editCopy and " Salvo como cópia; a original continua igual." or " Se não gostou, use «Desfazer» na aba Regravar."), "ok")
+end
+
+local function undoEdit()
+	if state ~= "idle" then
+		busyMessage()
+		return
+	end
+	local rec = selectedRec()
+	if not rec then
+		return
+	end
+	if not rec.undo then
+		setMsg("Não há edição para desfazer nesta gravação.", "info")
+		return
+	end
+	rec.frames, rec.duration = rec.undo.frames, rec.undo.duration
+	rec.undo = nil
+	rec.rows = nil
+	rec.stats = nil
+	rec.pts = nil
+	edit.rec = nil
+	renderList()
+	markDirty(true)
+	setMsg("Última edição desfeita: «" .. rec.name .. "» voltou ao que era antes.", "ok")
+end
+
+local function setEditValue(which, t)
+	if state ~= "idle" then
+		return
+	end
+	local rec = ensureEdit()
+	if not rec then
+		return
+	end
+	t = math.clamp(t, 0, rec.duration)
+	if which == "a" then
+		edit.a = t
+		if edit.b < t then
+			edit.b = t
+		end
+	else
+		edit.b = t
+		if edit.a > t then
+			edit.a = t
+		end
+	end
+	if refreshEdit then
+		refreshEdit()
+	end
+end
+
+-- marca A ou B no ponto do trajeto mais perto de onde o personagem está agora
+local function markPoint(which)
+	if state ~= "idle" then
+		busyMessage()
+		return
+	end
+	local rec = ensureEdit()
+	if not rec then
+		setMsg("Selecione uma gravação na lista da esquerda primeiro.", "warn")
+		return
+	end
+	local _, _, root = getCharacter()
+	if not root then
+		setMsg("Seu personagem não está pronto.", "err")
+		return
+	end
+	local frames = rec.frames
+	local lo, hi = 1, #frames
+	if which == "a" then
+		hi = frameIndexAt(frames, edit.b) -- A não pode passar de B
+	else
+		lo = frameIndexAt(frames, edit.a) -- B não pode ficar antes de A
+	end
+	local best, bestD = lo, math.huge
+	for i = lo, hi do
+		local d = (frames[i].cf.Position - root.Position).Magnitude
+		if d < bestD then
+			best, bestD = i, d
+		end
+	end
+	setEditValue(which, frames[best].t)
+	setMsg(string.format("Ponto %s marcado em %.1fs (a %.1f studs de você).%s", string.upper(which), frames[best].t, bestD, bestD > 8 and " Você está longe do trajeto — confira o pilar no mundo." or ""), bestD > 8 and "warn" or "ok")
+end
+
+----------------------------------------------------------------------
+-- FECHAR O SCRIPT (botão X): salva tudo e remove tudo
+----------------------------------------------------------------------
+local closeArmed, closeToken = false, 0
+
+local function teardown()
+	closed = true
+	store.token += 1 -- cancela qualquer salvamento agendado
+	for _, c in ipairs(conns) do
+		pcall(function()
+			c:Disconnect()
+		end)
+	end
+	table.clear(conns)
+	if recConn then
+		recConn:Disconnect()
+		recConn = nil
+	end
+	clearPath()
+	clearCutMarkers()
+	clearDummyGuide()
+	if marker then
+		marker:Destroy()
+		marker = nil
+	end
+	if ui.gui then
+		ui.gui:Destroy()
+	end
+end
+
+local function closeScript()
+	if closed then
+		return
+	end
+	if state == "playing" or state == "walking" or state == "countdown" then
+		stopPlayback() -- para o que estiver rodando (devolve os controles ao personagem)
+	elseif state ~= "idle" then
+		setMsg("Não dá para fechar agora: termine a gravação, a janela de nome ou a de exportar primeiro. Nada foi perdido.", "warn")
+		return
+	end
+	local saved
+	if canFile then
+		saved = saveNow(false) -- salva tudo antes de apagar, mesmo com o auto-salvar desligado
+	else
+		saved = (#recs == 0) -- sem arquivo não há onde guardar: só fecha direto se não houver nada a perder
+	end
+	if not saved and not closeArmed then
+		closeArmed = true
+		closeToken += 1
+		local tok = closeToken
+		ui.closeBtn.Text = "?"
+		ui.closeBtn.BackgroundColor3 = C.yellow
+		if canFile then
+			setMsg("Não consegui salvar as gravações. Clique no X de novo para fechar mesmo assim.", "warn")
+		else
+			setMsg("Este ambiente não salva arquivos: ao fechar, as gravações somem. Use «Exportar todas» antes, ou clique no X de novo para fechar mesmo assim.", "warn")
+		end
+		task.delay(6, function()
+			if closeArmed and tok == closeToken and not closed then
+				closeArmed = false
+				ui.closeBtn.Text = "X"
+				ui.closeBtn.BackgroundColor3 = C.red
+			end
+		end)
+		return
+	end
+	teardown()
+end
+
+----------------------------------------------------------------------
+-- AÇÕES (cada uma vira um cartão na interface)
+----------------------------------------------------------------------
+local function safe(fn)
+	return function(...)
+		local ok, err = pcall(fn, ...)
+		if not ok then
+			warn("[Gravador] " .. tostring(err))
+			setMsg("Erro interno: " .. tostring(err), "err")
+		end
+	end
+end
+
+local ACTIONS = {
+	{ id = "start", tab = "rec", icon = "🔴", color = C.red, title = "Iniciar gravação", desc = "Começa a gravar tudo que você faz: andar, pular e girar.", default = Enum.KeyCode.F, fn = safe(startRecording) },
+	{ id = "stop", tab = "rec", icon = "⏹", color = C.yellow, title = "Parar gravação", desc = "Termina a gravação (ou a regravação de um trecho).", default = Enum.KeyCode.R, fn = safe(stopRecordingAction) },
+	{ id = "edit", tab = "edit", icon = "✂", color = C.blue, title = "Regravar o trecho", desc = "Vai ao ponto A (ou começa onde você está), conta 3s e grava o trecho.", default = Enum.KeyCode.V, fn = safe(startEditRecording) },
+	{ id = "newstart", tab = "edit", icon = "🧲", color = C.teal, title = "Novo início (juntar)", desc = "Fique no novo ponto inicial, fora do trajeto, e ande até encostar no trajeto antigo: os dois se juntam sozinhos.", height = 72, default = Enum.KeyCode.N, fn = safe(startJoinRecording) },
+	{ id = "goto", tab = "play", icon = "📍", color = C.teal, title = "Ir ao ponto inicial", desc = "Leva você até onde a gravação selecionada começou.", default = Enum.KeyCode.T, fn = safe(goToStart) },
+	{ id = "play", tab = "play", icon = "▶", color = C.green, title = "Iniciar imitação", desc = "Repete a gravação selecionada. Só inicia no ponto inicial.", default = Enum.KeyCode.G, fn = safe(startPlayback) },
+	{ id = "stopplay", tab = "play", icon = "✋", color = C.red, title = "Parar imitação", desc = "Interrompe a imitação, a caminhada ou a contagem a qualquer momento.", default = Enum.KeyCode.Y, fn = safe(stopPlayback) },
+	{ id = "toggle", tab = "cfg", icon = "👁", color = C.purple, title = "Minimizar / mostrar", desc = "Recolhe a janela num botãozinho 🎬. Clique nele (ou use a tecla) para abrir.", default = Enum.KeyCode.H, fn = safe(toggleGui) },
+}
+local ACTION_BY_ID = {}
+for _, a in ipairs(ACTIONS) do
+	binds[a.id] = a.default
+	ACTION_BY_ID[a.id] = a
+end
+
+----------------------------------------------------------------------
+-- TROCAR TECLAS
+----------------------------------------------------------------------
+local function beginRebind(id)
+	if state ~= "idle" then
+		busyMessage()
+		return
+	end
+	rebindingId = id
+	refreshKeys()
+	setMsg("Pressione a nova tecla para «" .. ACTION_BY_ID[id].title .. "».  (Esc cancela)", "warn")
+end
+
+local function handleRebind(input)
+	local kc = input.KeyCode
+	if kc == Enum.KeyCode.Unknown then
+		return
+	end
+	local id = rebindingId
+	if kc == Enum.KeyCode.Escape then
+		rebindingId = nil
+		refreshKeys()
+		setMsg("Troca de tecla cancelada.", "info")
+		return
+	end
+	if BLOCKED_KEYS[kc] then
+		setMsg("A tecla " .. kc.Name .. " é usada para andar/pular. Escolha outra.", "err")
+		return
+	end
+	for otherId, other in pairs(binds) do
+		if otherId ~= id and other == kc then
+			setMsg("A tecla " .. kc.Name .. " já é usada por «" .. ACTION_BY_ID[otherId].title .. "». Escolha outra.", "err")
+			return
+		end
+	end
+	binds[id] = kc
+	rebindingId = nil
+	refreshKeys()
+	refreshHelp()
+	markDirty()
+	setMsg("Pronto! «" .. ACTION_BY_ID[id].title .. "» agora usa a tecla [" .. kc.Name .. "].", "ok")
+end
+
+----------------------------------------------------------------------
+-- CONSTRUÇÃO DA INTERFACE
+----------------------------------------------------------------------
+local gui = make("ScreenGui", {
+	Name = "GravadorDeMovimentos",
+	ResetOnSpawn = false,
+	ZIndexBehavior = Enum.ZIndexBehavior.Sibling,
+	IgnoreGuiInset = true,
+}, playerGui)
+ui.gui = gui
+
+-- escala automática (celular / telas pequenas)
+local scaleObjs = {}
+local function addScale(obj, w, h)
+	scaleObjs[#scaleObjs + 1] = { obj = obj, w = w, h = h }
+end
+local function updateScale()
+	local cam = workspace.CurrentCamera
+	if not cam then
+		return
+	end
+	local vp = cam.ViewportSize
+	for _, s in ipairs(scaleObjs) do
+		s.obj.Scale = math.clamp(math.min(vp.X / s.w, vp.Y / s.h), 0.45, 1.25)
+	end
+end
+
+local main = make("Frame", {
+	Name = "Janela",
+	Size = UDim2.fromOffset(840, 580),
+	AnchorPoint = Vector2.new(0.5, 0.5),
+	Position = UDim2.fromScale(0.5, 0.5),
+	BackgroundColor3 = C.bg,
+	Active = true,
+}, gui)
+corner(main, 16)
+make("UIStroke", { Color = C.card, Thickness = 2 }, main)
+make("UIGradient", { Color = ColorSequence.new(Color3.fromRGB(255, 255, 255), Color3.fromRGB(205, 208, 225)), Rotation = 90 }, main)
+ui.main = main
+
+local uiScale = make("UIScale", {}, main)
+addScale(uiScale, 900, 640)
+
+-- Arrastar (e, se não arrastou, tratar como clique).
+-- Só reage ao toque/clique ESQUERDO que COMEÇOU neste botão: o botão direito e cliques em
+-- qualquer outro lugar da tela são ignorados (era isso que reabria o menu sozinho).
+local function makeDraggable(handle, target, scaleObj, onClick)
+	local active, activeType = nil, nil
+	local moved = false
+	local dragStart, startPos = Vector2.zero, target.Position
+
+	handle.InputBegan:Connect(function(input)
+		local t = input.UserInputType
+		if active == nil and (t == Enum.UserInputType.MouseButton1 or t == Enum.UserInputType.Touch) then
+			active, activeType, moved = input, t, false
+			dragStart = Vector2.new(input.Position.X, input.Position.Y)
+			startPos = target.Position
+		end
+	end)
+
+	onGlobal(UserInputService.InputChanged, function(input)
+		if not active then
+			return
+		end
+		local t = input.UserInputType
+		local isMove = (activeType == Enum.UserInputType.MouseButton1 and t == Enum.UserInputType.MouseMovement)
+			or (activeType == Enum.UserInputType.Touch and t == Enum.UserInputType.Touch)
+		if not isMove then
+			return
+		end
+		local d = Vector2.new(input.Position.X, input.Position.Y) - dragStart
+		if d.Magnitude > 5 then
+			moved = true
+		end
+		if moved then
+			local s = scaleObj and scaleObj.Scale or 1
+			target.Position = UDim2.new(startPos.X.Scale, startPos.X.Offset + d.X / s, startPos.Y.Scale, startPos.Y.Offset + d.Y / s)
+		end
+	end)
+
+	onGlobal(UserInputService.InputEnded, function(input)
+		if not active or input.UserInputType ~= activeType then
+			return
+		end
+		local wasClick = not moved
+		active = nil -- zera sempre: nada fica "armado" para o próximo clique
+		if wasClick and onClick then
+			onClick()
+		end
+	end)
+end
+
+-- Botãozinho do modo minimizado
+ui.mini = button({
+	Name = "Minimizado",
+	Text = "🎬",
+	TextSize = 26,
+	BackgroundColor3 = C.blue,
+	Size = UDim2.fromOffset(56, 56),
+	Position = UDim2.new(0, 24, 0.5, -28),
+	Visible = false,
+	ZIndex = 50,
+}, gui)
+corner(ui.mini, 28)
+make("UIStroke", { Color = C.white, Thickness = 2, Transparency = 0.5 }, ui.mini)
+ui.miniDot = make("Frame", { Size = UDim2.fromOffset(14, 14), Position = UDim2.new(1, -16, 0, 2), BackgroundColor3 = C.green }, ui.mini)
+corner(ui.miniDot, 7)
+make("UIStroke", { Color = C.bg, Thickness = 2 }, ui.miniDot)
+makeDraggable(ui.mini, ui.mini, nil, function()
+	setMinimized(false)
+end)
+
+-- mini botão ⚡ (liga/desliga) que acompanha o 🎬 quando o painel está minimizado
+ui.miniPower = button({
+	Name = "MiniLigar",
+	Text = "⚡",
+	TextSize = 13,
+	BackgroundColor3 = C.green,
+	Size = UDim2.fromOffset(26, 26),
+	Visible = false,
+	ZIndex = 51,
+}, gui)
+corner(ui.miniPower, 13)
+make("UIStroke", { Color = C.bg, Thickness = 2 }, ui.miniPower)
+local function placeMiniPower()
+	local p = ui.mini.Position
+	ui.miniPower.Position = UDim2.new(p.X.Scale, p.X.Offset + 36, p.Y.Scale, p.Y.Offset + 36)
+end
+placeMiniPower()
+ui.mini:GetPropertyChangedSignal("Position"):Connect(placeMiniPower)
+ui.miniPower.MouseButton1Click:Connect(safe(function()
+	setEnabled(not enabled)
+end))
+
+-- Aviso na tela (aparece só quando o painel está minimizado)
+ui.toast = make("Frame", {
+	Name = "Aviso",
+	Size = UDim2.fromOffset(540, 50),
+	AnchorPoint = Vector2.new(0.5, 1),
+	Position = UDim2.new(0.5, 0, 1, -28),
+	BackgroundColor3 = C.panel,
+	Visible = false,
+	ZIndex = 60,
+}, gui)
+corner(ui.toast, 12)
+make("UIStroke", { Color = C.white, Thickness = 1, Transparency = 0.7 }, ui.toast)
+ui.toastLabel = label({
+	Text = "",
+	TextSize = 14,
+	TextWrapped = true,
+	TextTruncate = Enum.TextTruncate.AtEnd,
+	Size = UDim2.new(1, -24, 1, 0),
+	Position = UDim2.fromOffset(12, 0),
+}, ui.toast)
+addScale(make("UIScale", {}, ui.toast), 580, 2000)
+
+-- Contagem grande (3 - 2 - 1 - VAI!) no meio da tela
+ui.count = make("Frame", {
+	Name = "Contagem",
+	Size = UDim2.fromOffset(340, 290),
+	AnchorPoint = Vector2.new(0.5, 0.5),
+	Position = UDim2.fromScale(0.5, 0.28),
+	BackgroundTransparency = 1,
+	Visible = false,
+	ZIndex = 70,
+}, gui)
+addScale(make("UIScale", {}, ui.count), 420, 560)
+local countCircle = make("Frame", {
+	Size = UDim2.fromOffset(210, 210),
+	AnchorPoint = Vector2.new(0.5, 0),
+	Position = UDim2.fromScale(0.5, 0),
+	BackgroundColor3 = C.bg,
+	BackgroundTransparency = 0.15,
+}, ui.count)
+make("UICorner", { CornerRadius = UDim.new(0.5, 0) }, countCircle)
+ui.countStroke = make("UIStroke", { Color = C.yellow, Thickness = 7 }, countCircle)
+ui.countPulse = make("UIScale", {}, countCircle)
+ui.countNum = label({
+	Text = "3",
+	Font = Enum.Font.GothamBlack,
+	TextSize = 120,
+	TextXAlignment = Enum.TextXAlignment.Center,
+	Size = UDim2.fromScale(1, 1),
+}, countCircle)
+ui.countCaption = label({
+	Text = "",
+	Font = Enum.Font.GothamBold,
+	TextSize = 17,
+	TextWrapped = true,
+	TextXAlignment = Enum.TextXAlignment.Center,
+	TextYAlignment = Enum.TextYAlignment.Top,
+	AnchorPoint = Vector2.new(0.5, 0),
+	Size = UDim2.fromOffset(340, 44),
+	Position = UDim2.new(0.5, 0, 0, 222),
+}, ui.count)
+ui.countCaption.TextStrokeTransparency = 0.35
+ui.countHint = label({
+	Text = "",
+	TextSize = 12,
+	TextColor3 = C.sub,
+	TextXAlignment = Enum.TextXAlignment.Center,
+	AnchorPoint = Vector2.new(0.5, 0),
+	Size = UDim2.fromOffset(340, 18),
+	Position = UDim2.new(0.5, 0, 0, 268),
+}, ui.count)
+ui.countHint.TextStrokeTransparency = 0.35
+
+-- Barra de título
+local titleBar = make("Frame", { Size = UDim2.new(1, 0, 0, 56), BackgroundTransparency = 1, Active = true }, main)
+label({ Text = "🎬 ECO", Font = Enum.Font.GothamBold, TextSize = 21, Size = UDim2.fromOffset(276, 26), Position = UDim2.fromOffset(20, 6) }, titleBar)
+label({ Text = "Gravador de parkour  •  por 0tavio50", TextSize = 12, TextColor3 = C.sub, Size = UDim2.fromOffset(276, 18), Position = UDim2.fromOffset(20, 32), TextTruncate = Enum.TextTruncate.AtEnd }, titleBar)
+local accent = make("Frame", { Size = UDim2.new(1, -32, 0, 2), Position = UDim2.fromOffset(16, 56), BackgroundColor3 = C.blue }, main)
+corner(accent, 1)
+make("UIGradient", { Color = ColorSequence.new(C.blue, C.teal) }, accent)
+makeDraggable(titleBar, main, uiScale, nil)
+
+local pill = make("Frame", { Size = UDim2.fromOffset(178, 32), Position = UDim2.new(1, -322, 0, 12), BackgroundColor3 = C.panel }, titleBar)
+corner(pill, 16)
+ui.statusDot = make("Frame", { Size = UDim2.fromOffset(10, 10), Position = UDim2.fromOffset(12, 11), BackgroundColor3 = C.green }, pill)
+corner(ui.statusDot, 5)
+ui.statusLabel = label({ Text = "Pronto", Font = Enum.Font.GothamBold, TextSize = 12, Size = UDim2.new(1, -34, 1, 0), Position = UDim2.fromOffset(30, 0), TextTruncate = Enum.TextTruncate.AtEnd }, pill)
+
+local minBtn = button({ Text = "▁ Minimizar", TextSize = 12, BackgroundColor3 = C.card, Size = UDim2.fromOffset(84, 32), Position = UDim2.new(1, -136, 0, 12) }, titleBar)
+corner(minBtn, 16)
+minBtn.MouseButton1Click:Connect(function()
+	setMinimized(true)
+end)
+
+-- Botão geral: liga / desliga todos os atalhos
+ui.powerBtn = button({ Text = "⚡ Ligado", TextSize = 12, BackgroundColor3 = C.green, Size = UDim2.fromOffset(92, 32), Position = UDim2.new(1, -422, 0, 12) }, titleBar)
+corner(ui.powerBtn, 16)
+ui.powerBtn.MouseButton1Click:Connect(safe(function()
+	setEnabled(not enabled)
+end))
+
+-- Botão X: salva tudo e remove o script por completo
+ui.closeBtn = button({ Text = "X", TextSize = 14, BackgroundColor3 = C.red, Size = UDim2.fromOffset(32, 32), Position = UDim2.new(1, -44, 0, 12) }, titleBar)
+corner(ui.closeBtn, 16)
+ui.closeBtn.MouseButton1Click:Connect(safe(closeScript))
+
+-- Painel esquerdo: lista de gravações
+local left = make("Frame", { Size = UDim2.fromOffset(250, 436), Position = UDim2.fromOffset(16, 68), BackgroundColor3 = C.panel }, main)
+corner(left, 12)
+label({ Text = "📁 Gravações salvas", Font = Enum.Font.GothamBold, TextSize = 15, Size = UDim2.new(1, -20, 0, 28), Position = UDim2.fromOffset(12, 6) }, left)
+label({ Text = "Clique numa gravação para selecioná-la", TextSize = 11, TextColor3 = C.sub, Size = UDim2.new(1, -20, 0, 14), Position = UDim2.fromOffset(12, 30) }, left)
+
+ui.listFrame = make("ScrollingFrame", {
+	Size = UDim2.new(1, -16, 1, -196),
+	Position = UDim2.fromOffset(8, 52),
+	BackgroundTransparency = 1,
+	ScrollBarThickness = 4,
+	CanvasSize = UDim2.new(),
+	AutomaticCanvasSize = Enum.AutomaticSize.Y,
+}, left)
+make("UIListLayout", { Padding = UDim.new(0, 6), SortOrder = Enum.SortOrder.LayoutOrder }, ui.listFrame)
+ui.emptyLabel = label({
+	Text = "Nenhuma gravação ainda.\n\nNa aba «Gravar», clique em «Iniciar gravação» (ou use o atalho) para fazer a primeira!",
+	TextSize = 13,
+	TextColor3 = C.sub,
+	TextWrapped = true,
+	TextXAlignment = Enum.TextXAlignment.Center,
+	Size = UDim2.new(1, -16, 0, 120),
+	Position = UDim2.fromOffset(8, 60),
+}, left)
+
+-- botões do painel esquerdo (grade 2×2 + excluir)
+local renameBtn = button({ Text = "✏ Renomear", TextSize = 13, BackgroundColor3 = C.blueDark, Size = UDim2.new(0.5, -12, 0, 36), Position = UDim2.new(0, 8, 1, -136) }, left)
+corner(renameBtn, 10)
+local dupBtn = button({ Text = "📑 Duplicar", TextSize = 13, BackgroundColor3 = C.blueDark, Size = UDim2.new(0.5, -12, 0, 36), Position = UDim2.new(0.5, 4, 1, -136) }, left)
+corner(dupBtn, 10)
+local exportBtn = button({ Text = "📤 Exportar", TextSize = 13, BackgroundColor3 = C.blueDark, Size = UDim2.new(0.5, -12, 0, 36), Position = UDim2.new(0, 8, 1, -92) }, left)
+corner(exportBtn, 10)
+local importBtn = button({ Text = "📥 Importar", TextSize = 13, BackgroundColor3 = C.blueDark, Size = UDim2.new(0.5, -12, 0, 36), Position = UDim2.new(0.5, 4, 1, -92) }, left)
+corner(importBtn, 10)
+local saveAllBtn = button({ Text = "💾 Salvar tudo", TextSize = 13, BackgroundColor3 = C.green, Size = UDim2.new(0.5, -12, 0, 40), Position = UDim2.new(0, 8, 1, -48) }, left)
+corner(saveAllBtn, 10)
+ui.delBtn = button({ Text = "🗑 Excluir", TextSize = 13, BackgroundColor3 = C.card, Size = UDim2.new(0.5, -12, 0, 40), Position = UDim2.new(0.5, 4, 1, -48) }, left)
+corner(ui.delBtn, 10)
+
+renameBtn.MouseButton1Click:Connect(safe(startRename))
+dupBtn.MouseButton1Click:Connect(safe(duplicateRec))
+saveAllBtn.MouseButton1Click:Connect(safe(function()
+	if state == "recording" then
+		busyMessage()
+		return
+	end
+	saveNow(true)
+end))
+exportBtn.MouseButton1Click:Connect(function()
+	openIO("export")
+end)
+importBtn.MouseButton1Click:Connect(function()
+	openIO("import")
+end)
+
+local delArmed, delToken = false, 0
+local function resetDel()
+	delArmed = false
+	ui.delBtn.Text = "🗑 Excluir"
+	ui.delBtn.BackgroundColor3 = C.card
+end
+ui.delBtn.MouseButton1Click:Connect(function()
+	if state ~= "idle" then
+		busyMessage()
+		return
+	end
+	local rec = selectedRec()
+	if not rec then
+		return
+	end
+	if not delArmed then
+		delArmed = true
+		delToken += 1
+		local tok = delToken
+		ui.delBtn.Text = "⚠ Confirmar?"
+		ui.delBtn.BackgroundColor3 = C.red
+		task.delay(3, function()
+			if delArmed and tok == delToken then
+				resetDel()
+			end
+		end)
+		return
+	end
+	resetDel()
+	local name = rec.name
+	table.remove(recs, selected)
+	selected = nil
+	edit.rec = nil
+	renderList()
+	markDirty(true)
+	setMsg("Gravação «" .. name .. "» excluída.", "info")
+end)
+
+-- Painel direito: abas
+local right = make("Frame", { Size = UDim2.fromOffset(542, 436), Position = UDim2.fromOffset(282, 68), BackgroundTransparency = 1 }, main)
+
+-- Faixa de resumo (sempre visível): gravação selecionada + situação ao vivo
+do
+	local sumBar = make("Frame", { Size = UDim2.new(1, 0, 0, 54), BackgroundColor3 = C.panel }, right)
+	corner(sumBar, 12)
+	ui.sumTitle = label({ Text = "", RichText = true, Font = Enum.Font.GothamBold, TextSize = 15, Size = UDim2.new(0.62, -12, 0, 22), Position = UDim2.fromOffset(12, 5), TextTruncate = Enum.TextTruncate.AtEnd }, sumBar)
+	ui.sumLine = label({ Text = "", RichText = true, TextSize = 12, TextColor3 = C.sub, Size = UDim2.new(0.62, -12, 0, 20), Position = UDim2.fromOffset(12, 28), TextTruncate = Enum.TextTruncate.AtEnd }, sumBar)
+	ui.sumRight = label({ Text = "", RichText = true, TextSize = 12, TextWrapped = true, TextXAlignment = Enum.TextXAlignment.Right, Size = UDim2.new(0.38, -12, 1, 0), Position = UDim2.new(0.62, 0, 0, 0) }, sumBar)
+end
+
+updateSummary = function()
+	if not ui.sumTitle then
+		return
+	end
+	local modeTxt = (settings.mode == "tp") and "⚡ Teleporte" or "🚶 Natural"
+	if settings.straighten then
+		modeTxt ..= " • 📏 retas"
+	end
+	local rec = selected and recs[selected]
+	if not rec then
+		ui.sumTitle.Text = '<font color="rgb(245,190,70)">Nenhuma gravação selecionada</font>'
+		ui.sumLine.Text = "Clique numa gravação da lista ou grave uma nova na aba «Gravar»."
+		ui.sumRight.Text = '<font color="rgb(150,158,180)">' .. modeTxt .. "</font>"
+		return
+	end
+	local st = getStats(rec)
+	ui.sumTitle.Text = esc(rec.name)
+	ui.sumLine.Text = string.format("⏱ %.1fs • 📏 %.0f studs • 🦘 %d pulos • 🏃 %.0f/s", rec.duration, st.length, st.jumps, st.avgSpeed)
+	local _, _, root = getCharacter()
+	local where = ""
+	if root then
+		local d = (root.Position - rec.frames[1].cf.Position).Magnitude
+		if d <= settings.tolerance then
+			where = string.format('<font color="rgb(60,190,115)">📍 no início ✔ (%.1f)</font>', d)
+		else
+			where = string.format('<font color="rgb(232,84,84)">📍 a %.1f studs do início</font>', d)
+		end
+	end
+	ui.sumRight.Text = where .. '\n<font color="rgb(150,158,180)">' .. modeTxt .. "</font>"
+end
+
+local tabBar = make("Frame", { Size = UDim2.new(1, 0, 0, 38), Position = UDim2.fromOffset(0, 60), BackgroundTransparency = 1 }, right)
+make("UIListLayout", { FillDirection = Enum.FillDirection.Horizontal, Padding = UDim.new(0, 6), SortOrder = Enum.SortOrder.LayoutOrder }, tabBar)
+
+local TABS = {
+	{ id = "rec", text = "🎥 Gravar" },
+	{ id = "edit", text = "✂ Regravar" },
+	{ id = "play", text = "▶ Reproduzir" },
+	{ id = "analysis", text = "📊 Análise" },
+	{ id = "cfg", text = "⚙ Ajustes" },
+}
+local tabCounters = {}
+
+for i, tab in ipairs(TABS) do
+	local btn = button({ Text = tab.text, TextSize = 13, BackgroundColor3 = C.panel, Size = UDim2.fromOffset(103, 38), LayoutOrder = i }, tabBar)
+	corner(btn, 10)
+	ui.tabBtns[tab.id] = btn
+
+	local frame = make("ScrollingFrame", {
+		Size = UDim2.new(1, 0, 1, -106),
+		Position = UDim2.fromOffset(0, 106),
+		BackgroundTransparency = 1,
+		Visible = false,
+		ScrollBarThickness = 4,
+		CanvasSize = UDim2.new(),
+		AutomaticCanvasSize = Enum.AutomaticSize.Y,
+		ScrollingDirection = Enum.ScrollingDirection.Y,
+	}, right)
+	make("UIListLayout", { Padding = UDim.new(0, 6), SortOrder = Enum.SortOrder.LayoutOrder }, frame)
+	ui.tabFrames[tab.id] = frame
+	tabCounters[tab.id] = 0
+end
+
+local function selectTab(id)
+	ui.tab = id
+	for tid, frame in pairs(ui.tabFrames) do
+		frame.Visible = (tid == id)
+	end
+	for tid, btn in pairs(ui.tabBtns) do
+		btn.BackgroundColor3 = (tid == id) and C.blue or C.panel
+		btn.TextColor3 = (tid == id) and C.white or C.sub
+	end
+	if id == "play" then
+		updateInfo()
+	elseif id == "edit" then
+		refreshEdit()
+	elseif id == "analysis" then
+		ui.anaDirty = true
+	end
+	ui.cutDirty = true
+	pcall(updateSummary)
+end
+for _, tab in ipairs(TABS) do
+	local tb = ui.tabBtns[tab.id]
+	tb.MouseButton1Click:Connect(function()
+		selectTab(tab.id)
+	end)
+	tb.MouseEnter:Connect(function()
+		if ui.tab ~= tab.id then
+			tb.BackgroundColor3 = C.cardHover
+		end
+	end)
+	tb.MouseLeave:Connect(function()
+		if ui.tab ~= tab.id then
+			tb.BackgroundColor3 = C.panel
+		end
+	end)
+end
+
+local function nextOrder(tabId)
+	tabCounters[tabId] += 1
+	return tabCounters[tabId]
+end
+
+local function newPlainCard(tabId, height)
+	local card = make("Frame", { Size = UDim2.new(1, -8, 0, height), BackgroundColor3 = C.card, LayoutOrder = nextOrder(tabId) }, ui.tabFrames[tabId])
+	corner(card, 10)
+	make("UIStroke", { Color = C.cardHover, Thickness = 1, Transparency = 0.4 }, card)
+	return card
+end
+
+local function newCard(tabId, iconText, iconColor, title, desc, height)
+	height = height or 58
+	local card = newPlainCard(tabId, height)
+	local icon = label({
+		Text = iconText,
+		Font = Enum.Font.GothamBold,
+		TextSize = 20,
+		TextXAlignment = Enum.TextXAlignment.Center,
+		Size = UDim2.fromOffset(40, 40),
+		Position = UDim2.new(0, 10, 0.5, -20),
+	}, card)
+	icon.BackgroundTransparency = 0
+	icon.BackgroundColor3 = iconColor
+	corner(icon, 10)
+	label({ Text = title, Font = Enum.Font.GothamBold, TextSize = 15, Size = UDim2.new(1, -190, 0, 20), Position = UDim2.fromOffset(60, 6) }, card)
+	local descLabel = label({ Text = desc, TextSize = 11, TextColor3 = C.sub, TextWrapped = true, TextYAlignment = Enum.TextYAlignment.Top, Size = UDim2.new(1, -190, 0, height - 30), Position = UDim2.fromOffset(60, 26) }, card)
+	return card, descLabel
+end
+
+local function newActionCard(a)
+	local card = newCard(a.tab, a.icon, a.color, a.title, a.desc, a.height)
+
+	-- clicar no cartão executa a ação
+	local actBtn = button({ Text = "", BackgroundTransparency = 1, Size = UDim2.new(1, -134, 1, 0) }, card)
+	actBtn.MouseEnter:Connect(function()
+		card.BackgroundColor3 = C.cardHover
+	end)
+	actBtn.MouseLeave:Connect(function()
+		card.BackgroundColor3 = C.card
+	end)
+	actBtn.MouseButton1Click:Connect(function()
+		if rebindingId then
+			return
+		end
+		if not enabled and a.id ~= "toggle" then
+			setMsg("O sistema está desligado. Clique em «⚡ Desligado» (no topo da janela) para ligar.", "warn")
+			return
+		end
+		a.fn()
+	end)
+
+	-- botão para trocar a tecla
+	local keyBtn = button({
+		Text = "",
+		RichText = true,
+		TextSize = 15,
+		BackgroundColor3 = C.panel,
+		Size = UDim2.fromOffset(116, 40),
+		Position = UDim2.new(1, -126, 0.5, -20),
+	}, card)
+	corner(keyBtn, 8)
+	make("UIStroke", { Color = C.cardHover, Thickness = 1 }, keyBtn)
+	keyBtn.MouseButton1Click:Connect(function()
+		if rebindingId == a.id then
+			rebindingId = nil
+			refreshKeys()
+			setMsg("Troca de tecla cancelada.", "info")
+		else
+			beginRebind(a.id)
+		end
+	end)
+	ui.keyBtns[a.id] = keyBtn
+end
+
+local function newInfoBox(tabId, height)
+	local box = newPlainCard(tabId, height)
+	box.BackgroundColor3 = C.panel
+	return label({
+		Text = "",
+		RichText = true,
+		TextSize = 13,
+		TextWrapped = true,
+		TextYAlignment = Enum.TextYAlignment.Top,
+		Size = UDim2.new(1, -24, 1, -16),
+		Position = UDim2.fromOffset(12, 8),
+	}, box)
+end
+
+local function newHeader(tabId, text)
+	local row = make("Frame", { Size = UDim2.new(1, -8, 0, 22), BackgroundTransparency = 1, LayoutOrder = nextOrder(tabId) }, ui.tabFrames[tabId])
+	label({ Text = text, Font = Enum.Font.GothamBold, TextSize = 11, TextColor3 = C.sub, TextYAlignment = Enum.TextYAlignment.Bottom, Size = UDim2.new(1, -8, 1, 0), Position = UDim2.fromOffset(6, 0) }, row)
+end
+
+-- Aba Gravar
+newHeader("rec", "GRAVAÇÃO COMPLETA")
+for _, a in ipairs(ACTIONS) do
+	if a.tab == "rec" then
+		newActionCard(a)
+	end
+end
+
+newHeader("rec", "TRAJETO")
+do
+	local strCard = newCard("rec", "📏", C.teal, "Linhas mais retas", "Tira o «tremido» do andar: o trajeto no chão vira linhas retas. Curvas, alturas, tempos e pulos/quedas são mantidos. Em parkour de precisão, use força baixa.", 118)
+	ui.straightBtn = button({ Text = "", TextSize = 11, Size = UDim2.fromOffset(150, 30), Position = UDim2.new(1, -160, 0, 6) }, strCard)
+	corner(ui.straightBtn, 8)
+	local stBox = make("Frame", { Size = UDim2.fromOffset(150, 30), Position = UDim2.new(1, -160, 0, 44), BackgroundTransparency = 1 }, strCard)
+	local stMinus = button({ Text = "−", TextSize = 18, BackgroundColor3 = C.panel, Size = UDim2.fromOffset(34, 30) }, stBox)
+	corner(stMinus, 8)
+	ui.straightVal = label({ Text = "", Font = Enum.Font.GothamBold, TextSize = 12, TextXAlignment = Enum.TextXAlignment.Center, Size = UDim2.fromOffset(76, 30), Position = UDim2.fromOffset(37, 0) }, stBox)
+	local stPlus = button({ Text = "+", TextSize = 18, BackgroundColor3 = C.panel, Size = UDim2.fromOffset(34, 30), Position = UDim2.fromOffset(116, 0) }, stBox)
+	corner(stPlus, 8)
+	ui.straightApply = button({ Text = "📏 Aplicar à selecionada", TextSize = 11, BackgroundColor3 = C.blueDark, Size = UDim2.fromOffset(150, 30), Position = UDim2.new(1, -160, 0, 82) }, strCard)
+	corner(ui.straightApply, 8)
+
+	ui.straightBtn.MouseButton1Click:Connect(function()
+		settings.straighten = not settings.straighten
+		refreshSettings()
+		markDirty()
+		if settings.straighten then
+			setMsg("Linhas retas ligadas: as próximas gravações já saem com o trajeto alisado.", "ok")
+		else
+			setMsg("Linhas retas desligadas para as próximas gravações.", "info")
+		end
+	end)
+	local function stepStraight(delta)
+		settings.straightTol = math.clamp(math.round((settings.straightTol + delta) * 10) / 10, 0.2, 3)
+		refreshSettings()
+		markDirty()
+	end
+	stMinus.MouseButton1Click:Connect(function()
+		stepStraight(-0.2)
+	end)
+	stPlus.MouseButton1Click:Connect(function()
+		stepStraight(0.2)
+	end)
+	ui.straightApply.MouseButton1Click:Connect(safe(straightenSelected))
+end
+
+newHeader("rec", "COMO USAR")
+ui.recHelp = newInfoBox("rec", 410)
+
+-- Aba Regravar
+ui.editInfo = newInfoBox("edit", 124)
+newHeader("edit", "1 · ESCOLHA O TRECHO (A → B)")
+
+local function newSlider(tabId, which, color, titleText, hintText)
+	local card = newPlainCard(tabId, 74)
+	label({ Text = titleText, Font = Enum.Font.GothamBold, TextSize = 14, Size = UDim2.new(1, -240, 0, 20), Position = UDim2.fromOffset(12, 6), TextTruncate = Enum.TextTruncate.AtEnd }, card)
+	local valueLbl = label({ Text = "0.0s", Font = Enum.Font.GothamBold, TextSize = 14, TextXAlignment = Enum.TextXAlignment.Right, Size = UDim2.fromOffset(70, 24), Position = UDim2.new(1, -150, 0, 4) }, card)
+	local minus = button({ Text = "◀", TextSize = 13, BackgroundColor3 = C.panel, Size = UDim2.fromOffset(32, 26), Position = UDim2.new(1, -74, 0, 3) }, card)
+	local plus = button({ Text = "▶", TextSize = 13, BackgroundColor3 = C.panel, Size = UDim2.fromOffset(32, 26), Position = UDim2.new(1, -38, 0, 3) }, card)
+	corner(minus, 7)
+	corner(plus, 7)
+	local here = button({ Text = "📍 Aqui", TextSize = 11, BackgroundColor3 = C.blueDark, Size = UDim2.fromOffset(62, 26), Position = UDim2.new(1, -226, 0, 3) }, card)
+	corner(here, 7)
+	here.MouseButton1Click:Connect(safe(function()
+		markPoint(which)
+	end))
+
+	local track = make("Frame", { Size = UDim2.new(1, -28, 0, 8), Position = UDim2.fromOffset(14, 42), BackgroundColor3 = C.panel }, card)
+	corner(track, 4)
+	local fill = make("Frame", { Size = UDim2.fromScale(0, 1), BackgroundColor3 = color }, track)
+	corner(fill, 4)
+	local knob = make("Frame", { Size = UDim2.fromOffset(18, 18), AnchorPoint = Vector2.new(0.5, 0.5), Position = UDim2.fromScale(0, 0.5), BackgroundColor3 = C.white }, track)
+	corner(knob, 9)
+	local hit = button({ Text = "", BackgroundTransparency = 1, Size = UDim2.new(1, -20, 0, 26), Position = UDim2.fromOffset(10, 33) }, card)
+	label({ Text = hintText, TextSize = 11, TextColor3 = C.sub, Size = UDim2.new(1, -24, 0, 14), Position = UDim2.fromOffset(12, 56), TextTruncate = Enum.TextTruncate.AtEnd }, card)
+
+	local dragging, dragType = false, nil
+	local function fromInput(input)
+		local rec = ensureEdit()
+		if not rec then
+			return
+		end
+		local x = (input.Position.X - track.AbsolutePosition.X) / math.max(track.AbsoluteSize.X, 1)
+		setEditValue(which, math.clamp(x, 0, 1) * rec.duration)
+	end
+	hit.InputBegan:Connect(function(input)
+		local t = input.UserInputType
+		if t ~= Enum.UserInputType.MouseButton1 and t ~= Enum.UserInputType.Touch then
+			return
+		end
+		if state ~= "idle" then
+			busyMessage()
+			return
+		end
+		if not ensureEdit() then
+			setMsg("Selecione uma gravação na lista da esquerda primeiro.", "warn")
+			return
+		end
+		dragging, dragType = true, t
+		fromInput(input)
+	end)
+	onGlobal(UserInputService.InputChanged, function(input)
+		if not dragging then
+			return
+		end
+		local t = input.UserInputType
+		if (dragType == Enum.UserInputType.MouseButton1 and t == Enum.UserInputType.MouseMovement) or (dragType == Enum.UserInputType.Touch and t == Enum.UserInputType.Touch) then
+			fromInput(input)
+		end
+	end)
+	onGlobal(UserInputService.InputEnded, function(input)
+		if dragging and input.UserInputType == dragType then
+			dragging = false
+		end
+	end)
+
+	local function nudge(delta)
+		if state ~= "idle" then
+			busyMessage()
+			return
+		end
+		if not ensureEdit() then
+			setMsg("Selecione uma gravação na lista da esquerda primeiro.", "warn")
+			return
+		end
+		setEditValue(which, (which == "a" and edit.a or edit.b) + delta)
+	end
+	minus.MouseButton1Click:Connect(function()
+		nudge(-0.1)
+	end)
+	plus.MouseButton1Click:Connect(function()
+		nudge(0.1)
+	end)
+
+	-- devolve a função que redesenha o controle
+	return function(t, dur)
+		local r = (dur > 0) and math.clamp(t / dur, 0, 1) or 0
+		knob.Position = UDim2.fromScale(r, 0.5)
+		if which == "a" then
+			fill.Position = UDim2.fromScale(0, 0)
+			fill.Size = UDim2.fromScale(r, 1)
+		else
+			fill.Position = UDim2.fromScale(r, 0)
+			fill.Size = UDim2.fromScale(1 - r, 1)
+		end
+		valueLbl.Text = string.format("%.1fs", t)
+	end
+end
+
+ui.sliders.a = newSlider("edit", "a", C.teal, "Começo mantido até (A)", "0 = refaz tudo desde o início  •  📍 Aqui = usa onde você está")
+ui.sliders.b = newSlider("edit", "b", C.yellow, "Final mantido de (B)", "No fim = refaz até o fim  •  📍 Aqui = usa onde você está")
+
+newHeader("edit", "2 · REGRAVE")
+for _, a in ipairs(ACTIONS) do
+	if a.tab == "edit" then
+		newActionCard(a)
+	end
+end
+
+newHeader("edit", "3 · OPÇÕES E DESFAZER")
+local optCard = newCard("edit", "⚙", C.blueDark, "Opções da regravação", "«Início: onde estou» não teleporta: você começa de onde estiver. «Substituir» guarda um Desfazer; «Nova cópia» mantém a original.", 114)
+ui.copyBtn = button({ Text = "", TextSize = 11, Size = UDim2.fromOffset(150, 30), Position = UDim2.new(1, -160, 0, 8) }, optCard)
+corner(ui.copyBtn, 8)
+ui.stopCutBtn = button({ Text = "", TextSize = 11, Size = UDim2.fromOffset(150, 30), Position = UDim2.new(1, -160, 0, 42) }, optCard)
+corner(ui.stopCutBtn, 8)
+ui.freeBtn = button({ Text = "", TextSize = 11, Size = UDim2.fromOffset(150, 30), Position = UDim2.new(1, -160, 0, 76) }, optCard)
+corner(ui.freeBtn, 8)
+ui.freeBtn.MouseButton1Click:Connect(function()
+	settings.editFree = not settings.editFree
+	refreshSettings()
+	ui.cutDirty = true
+	markDirty()
+	if settings.editFree then
+		setMsg("Início livre: ao regravar, você NÃO é teleportado ao ponto A — a regravação começa de onde estiver.", "ok")
+	else
+		setMsg("Início no ponto A: ao regravar, você é levado ao ponto A antes da contagem.", "ok")
+	end
+end)
+ui.copyBtn.MouseButton1Click:Connect(function()
+	settings.editCopy = not settings.editCopy
+	refreshSettings()
+	markDirty()
+end)
+ui.stopCutBtn.MouseButton1Click:Connect(function()
+	settings.stopAtCut = not settings.stopAtCut
+	refreshSettings()
+	markDirty()
+end)
+
+local undoCard = newCard("edit", "↩", C.red, "Desfazer última edição", "Volta a gravação selecionada ao que era antes da última regravação de trecho.", 64)
+ui.undoBtn = button({ Text = "↩ Desfazer", TextSize = 13, BackgroundColor3 = C.panel, Size = UDim2.fromOffset(150, 36), Position = UDim2.new(1, -160, 0.5, -18) }, undoCard)
+corner(ui.undoBtn, 8)
+ui.undoBtn.MouseButton1Click:Connect(safe(undoEdit))
+
+refreshEdit = function()
+	if not ui.sliders.a then
+		return
+	end
+	local rec = ensureEdit()
+	local dur = rec and rec.duration or 0
+	ui.sliders.a(rec and edit.a or 0, dur)
+	ui.sliders.b(rec and edit.b or 0, dur)
+	ui.cutDirty = true
+	updateEditInfo()
+end
+
+-- Aba Reproduzir
+newHeader("play", "IR AO INÍCIO E IMITAR")
+for _, a in ipairs(ACTIONS) do
+	if a.tab == "play" then
+		newActionCard(a)
+	end
+end
+do
+	local walkCard = newCard("play", "🚶", C.teal, "Como ir ao ponto inicial", "Teleporte: instantâneo. Andando: calcula a rota inteira primeiro (contornando o que estiver no caminho) e só então anda, sem parar no meio (no modo Natural é sempre assim).", 82)
+	ui.walkBtn = button({ Text = "", TextSize = 12, Size = UDim2.fromOffset(150, 40), Position = UDim2.new(1, -160, 0.5, -20) }, walkCard)
+	corner(ui.walkBtn, 8)
+	ui.walkBtn.MouseButton1Click:Connect(function()
+		if settings.mode == "nat" then
+			setMsg("No modo Natural o personagem sempre vai ao início andando: calcula a rota e segue sem parar no meio.", "info")
+			return
+		end
+		settings.walkGoto = not settings.walkGoto
+		refreshSettings()
+		markDirty()
+		if settings.walkGoto then
+			setMsg("«Ir ao ponto inicial» agora anda: calcula a rota e segue sem parar no meio (a imitação continua em teleporte).", "ok")
+		else
+			setMsg("«Ir ao ponto inicial» volta a teleportar.", "ok")
+		end
+	end)
+end
+newHeader("play", "SITUAÇÃO AGORA")
+ui.infoLabel = newInfoBox("play", 100)
+
+-- Aba Análise
+local okAnalysis, errAnalysis = pcall(function()
+	local MAP_W, MAP_H, GRAPH_H = 526, 230, 78
+	ui.anaInfo = newInfoBox("analysis", 166)
+	newHeader("analysis", "MAPA DO TRAJETO (3D — ARRASTE PARA GIRAR)")
+	local mapCard = newPlainCard("analysis", MAP_H + 34)
+	ui.mapView = make("ViewportFrame", {
+		Size = UDim2.fromOffset(MAP_W, MAP_H),
+		Position = UDim2.fromOffset(4, 4),
+		BackgroundColor3 = C.bg,
+		Ambient = Color3.fromRGB(150, 150, 160),
+		LightColor = Color3.fromRGB(255, 255, 255),
+		LightDirection = Vector3.new(-0.6, -1, -0.4),
+	}, mapCard)
+	corner(ui.mapView, 8)
+	ui.mapCam = make("Camera", { FieldOfView = 55 }, ui.mapView)
+	ui.mapView.CurrentCamera = ui.mapCam
+	ui.mapParts = make("Folder", { Name = "Trajeto3D" }, ui.mapView)
+	ui.mapHint = label({
+		Text = "Selecione uma gravação na lista para ver o mapa.",
+		TextSize = 13,
+		TextColor3 = C.sub,
+		TextWrapped = true,
+		TextXAlignment = Enum.TextXAlignment.Center,
+		Size = UDim2.fromOffset(MAP_W, MAP_H),
+		Position = UDim2.fromOffset(4, 4),
+	}, mapCard)
+	ui.mapCaption = label({
+		Text = "🖱 arraste para girar  •  role o scroll (ou use +/−) para aproximar",
+		TextSize = 11,
+		TextColor3 = C.sub,
+		TextXAlignment = Enum.TextXAlignment.Center,
+		Size = UDim2.new(1, -8, 0, 18),
+		Position = UDim2.fromOffset(4, MAP_H + 10),
+	}, mapCard)
+
+	local function roundBtn(text, pos)
+		local b = button({ Text = text, TextSize = 16, BackgroundColor3 = C.panel, Position = pos, Size = UDim2.fromOffset(28, 28) }, mapCard)
+		corner(b, 8)
+		return b
+	end
+	local resetBtn = roundBtn("⟲", UDim2.new(1, -104, 0, 10))
+	local zoomOut = roundBtn("−", UDim2.new(1, -72, 0, 10))
+	local zoomIn = roundBtn("+", UDim2.new(1, -40, 0, 10))
+
+	newHeader("analysis", "VELOCIDADE AO LONGO DO TEMPO")
+	local graphCard = newPlainCard("analysis", GRAPH_H + 34)
+	ui.graphFrame = make("Frame", { Size = UDim2.fromOffset(MAP_W, GRAPH_H), Position = UDim2.fromOffset(4, 4), BackgroundColor3 = C.bg, ClipsDescendants = true }, graphCard)
+	corner(ui.graphFrame, 8)
+	ui.graphCaption = label({ Text = "", TextSize = 11, TextColor3 = C.sub, TextXAlignment = Enum.TextXAlignment.Center, Size = UDim2.new(1, -8, 0, 18), Position = UDim2.fromOffset(4, GRAPH_H + 10) }, graphCard)
+
+	-- ===== câmera em órbita: arrastar gira, scroll (ou os botões) aproxima =====
+	local DEFAULT_AZ, DEFAULT_EL = 0.9, 0.5
+	ui.orbit = { az = DEFAULT_AZ, el = DEFAULT_EL, dist = 20, center = Vector3.new(0, 0, 0) }
+	local lastMapRec = nil
+
+	local function applyCamera()
+		local o = ui.orbit
+		local cosEl = math.cos(o.el)
+		local dir = Vector3.new(math.cos(o.az) * cosEl, math.sin(o.el), math.sin(o.az) * cosEl)
+		ui.mapCam.CFrame = CFrame.lookAt(o.center + dir * o.dist, o.center)
+	end
+
+	local function zoomBy(mult)
+		ui.orbit.dist = math.clamp(ui.orbit.dist * mult, 3, 400)
+		applyCamera()
+	end
+
+	local dragging, dragType, lastX, lastY = false, nil, 0, 0
+	ui.mapView.InputBegan:Connect(function(input)
+		local t = input.UserInputType
+		if t == Enum.UserInputType.MouseButton1 or t == Enum.UserInputType.Touch then
+			dragging, dragType = true, t
+			lastX, lastY = input.Position.X, input.Position.Y
+		end
+	end)
+	ui.mapView.InputChanged:Connect(function(input)
+		if input.UserInputType == Enum.UserInputType.MouseWheel then
+			zoomBy(1 - input.Position.Z * 0.12)
+		end
+	end)
+	onGlobal(UserInputService.InputChanged, function(input)
+		if not dragging then
+			return
+		end
+		local t = input.UserInputType
+		if (dragType == Enum.UserInputType.MouseButton1 and t == Enum.UserInputType.MouseMovement) or (dragType == Enum.UserInputType.Touch and t == Enum.UserInputType.Touch) then
+			local dx, dy = input.Position.X - lastX, input.Position.Y - lastY
+			lastX, lastY = input.Position.X, input.Position.Y
+			ui.orbit.az -= dx * 0.012
+			ui.orbit.el = math.clamp(ui.orbit.el + dy * 0.012, -1.4, 1.4)
+			applyCamera()
+		end
+	end)
+	onGlobal(UserInputService.InputEnded, function(input)
+		if dragging and input.UserInputType == dragType then
+			dragging = false
+		end
+	end)
+	zoomIn.MouseButton1Click:Connect(function()
+		zoomBy(0.8)
+	end)
+	zoomOut.MouseButton1Click:Connect(function()
+		zoomBy(1.25)
+	end)
+	resetBtn.MouseButton1Click:Connect(function()
+		ui.orbit.az, ui.orbit.el = DEFAULT_AZ, DEFAULT_EL
+		applyCamera()
+	end)
+
+	local function line3D(a, b, color, thick)
+		local len = (b - a).Magnitude
+		if len < 0.05 then
+			return
+		end
+		make("Part", {
+			Anchored = true,
+			CanCollide = false,
+			CanQuery = false,
+			CanTouch = false,
+			CastShadow = false,
+			Material = Enum.Material.Neon,
+			Color = color,
+			Size = Vector3.new(thick, thick, len),
+			CFrame = CFrame.lookAt(a, b) * CFrame.new(0, 0, -len / 2),
+		}, ui.mapParts)
+	end
+
+	local function dot3D(pos, size, color)
+		return make("Part", {
+			Anchored = true,
+			CanCollide = false,
+			CanQuery = false,
+			CanTouch = false,
+			CastShadow = false,
+			Shape = Enum.PartType.Ball,
+			Material = Enum.Material.Neon,
+			Color = color,
+			Size = Vector3.new(size, size, size),
+			CFrame = CFrame.new(pos),
+		}, ui.mapParts)
+	end
+
+	-- redesenha o mapa 3D e o gráfico da gravação selecionada
+	ui.drawAnalysis = function()
+		for _, c in ipairs(ui.mapParts:GetChildren()) do
+			c:Destroy()
+		end
+		for _, c in ipairs(ui.graphFrame:GetChildren()) do
+			if c:IsA("GuiObject") then
+				c:Destroy()
+			end
+		end
+		ui.mapPlayerPart = nil
+		local rec = selected and recs[selected]
+		ui.mapHint.Visible = (rec == nil)
+		if not rec then
+			ui.graphCaption.Text = ""
+			return
+		end
+		local frames = rec.frames
+		local old = rec.undo and rec.undo.frames or nil
+
+		local minP, maxP = frames[1].cf.Position, frames[1].cf.Position
+		local function grow(list)
+			for _, f in ipairs(list) do
+				local p = f.cf.Position
+				minP = Vector3.new(math.min(minP.X, p.X), math.min(minP.Y, p.Y), math.min(minP.Z, p.Z))
+				maxP = Vector3.new(math.max(maxP.X, p.X), math.max(maxP.Y, p.Y), math.max(maxP.Z, p.Z))
+			end
+		end
+		grow(frames)
+		if old then
+			grow(old)
+		end
+		local center = (minP + maxP) * 0.5
+		local radius = math.max((maxP - minP).Magnitude / 2, 2)
+		if rec ~= lastMapRec then
+			ui.orbit.az, ui.orbit.el = DEFAULT_AZ, DEFAULT_EL
+			ui.orbit.dist = radius * 2.4
+			lastMapRec = rec
+		end
+		ui.orbit.center = center
+		applyCamera()
+
+		local function polyline(list, colorAt, thick)
+			local n = #list
+			local step = math.max(1, n // 220)
+			local total = math.max(1, (n - 1) // step)
+			local prev
+			local k = 0
+			local function add(i)
+				local pos = list[i].cf.Position
+				if prev then
+					line3D(prev, pos, colorAt(math.min(k / total, 1)), thick)
+				end
+				prev = pos
+				k += 1
+			end
+			for i = 1, n, step do
+				add(i)
+			end
+			if (n - 1) % step ~= 0 then
+				add(n)
+			end
+		end
+		if old then
+			polyline(old, function()
+				return Color3.fromRGB(105, 112, 138)
+			end, 0.25)
+		end
+		polyline(frames, function(f)
+			return Color3.fromHSV(0.36 * (1 - f), 0.85, 1) -- verde → amarelo → vermelho, como no mundo
+		end, 0.4)
+		for i = 2, #frames do
+			if frames[i].j and not frames[i - 1].j then
+				dot3D(frames[i].cf.Position, 1, C.yellow)
+			end
+		end
+		dot3D(frames[1].cf.Position, 1.4, C.green)
+		dot3D(frames[#frames].cf.Position, 1.4, C.red)
+		ui.mapPlayerPart = dot3D(frames[1].cf.Position, 1.1, C.white)
+
+		-- gráfico de velocidade (barras amarelas = momentos com pulo) — continua em 2D: é uma linha do tempo
+		local st = getStats(rec)
+		local bars = 120
+		local dur = math.max(rec.duration, 0.1)
+		local maxV = math.max(20, st.maxSpeed)
+		local bw = MAP_W / bars
+		local fi = 1
+		for b = 1, bars do
+			local t1 = b / bars * dur
+			local peak, jumped = 0, false
+			while fi <= #frames and frames[fi].t < t1 do
+				local f = frames[fi]
+				local sp = math.sqrt(f.v.X * f.v.X + f.v.Z * f.v.Z)
+				if sp > peak then
+					peak = sp
+				end
+				if f.j then
+					jumped = true
+				end
+				fi += 1
+			end
+			local h = math.clamp(peak / maxV, 0, 1) * (GRAPH_H - 6)
+			if h >= 1 then
+				make("Frame", {
+					AnchorPoint = Vector2.new(0, 1),
+					Position = UDim2.fromOffset((b - 1) * bw, GRAPH_H - 2),
+					Size = UDim2.fromOffset(math.max(bw - 1, 1), h),
+					BackgroundColor3 = jumped and C.yellow or C.blue,
+				}, ui.graphFrame)
+			end
+		end
+		ui.graphCaption.Text = string.format("0s → %.1fs   •   amarelo = pulo   •   altura = velocidade (máx. %.0f studs/s)", rec.duration, maxV)
+	end
+
+	-- textos da análise (atualizados ao vivo)
+	ui.updateAnalysisInfo = function()
+		local rec = selected and recs[selected]
+		if not rec then
+			ui.anaInfo.Text = '<font color="rgb(245,190,70)">Nenhuma gravação selecionada.</font> Clique numa na lista da esquerda para ver a análise.'
+			return
+		end
+		local st = getStats(rec)
+		local fr = rec.frames
+		local p1, p2 = fr[1].cf.Position, fr[#fr].cf.Position
+		local pct = st.straight * 100
+		local col = (pct >= 98) and "rgb(60,190,115)" or ((pct >= 93) and "rgb(245,190,70)" or "rgb(232,84,84)")
+		local lines = {
+			"<b>" .. esc(rec.name) .. "</b>",
+			string.format("Duração <b>%.1fs</b>  •  <b>%d</b> pontos (%.0f por segundo)  •  <b>%d</b> pulos", rec.duration, #fr, #fr / math.max(rec.duration, 0.01), st.jumps),
+			string.format("Percurso <b>%.0f</b> studs  •  do início ao fim em linha reta <b>%.0f</b> studs", st.length, (p2 - p1).Magnitude),
+			string.format("Velocidade média <b>%.1f</b>  •  máxima <b>%.1f</b> studs/s", st.avgSpeed, st.maxSpeed),
+			string.format('Retidão do trajeto: <font color="%s"><b>%.0f%%</b></font>  (100%% = sem tremido; melhore em «Linhas mais retas»)', col, pct),
+		}
+		if rec.undo then
+			lines[#lines + 1] = string.format("Versão anterior guardada: <b>%.1fs</b>  (linha cinza no mapa; «Desfazer» na aba Regravar)", rec.undo.duration)
+		else
+			lines[#lines + 1] = '<font color="rgb(150,158,180)">Sem versão anterior (nenhuma edição para desfazer).</font>'
+		end
+		local _, _, root = getCharacter()
+		if root then
+			lines[#lines + 1] = string.format('<font color="rgb(150,158,180)">Você está a %.1f studs do início e a %.1f do fim.</font>', (root.Position - p1).Magnitude, (root.Position - p2).Magnitude)
+		end
+		lines[#lines + 1] = '<font color="rgb(150,158,180)">Mapa 3D: 🟢 início  🔴 fim  🟡 pulos  ⚪ você  •  arraste para girar, scroll para zoom</font>'
+		ui.anaInfo.Text = table.concat(lines, "\n")
+	end
+
+	ui.updateAnalysisLive = function()
+		local _, _, root = getCharacter()
+		if root and ui.mapPlayerPart then
+			ui.mapPlayerPart.CFrame = CFrame.new(root.Position)
+		end
+	end
+end)
+if not okAnalysis then
+	warn("[Gravador] aba Análise (mapa 3D) não pôde ser criada neste ambiente: " .. tostring(errAnalysis))
+	for _, c in ipairs(ui.tabFrames.analysis:GetChildren()) do
+		if c:IsA("GuiObject") then
+			c:Destroy()
+		end
+	end
+	newCard("analysis", "⚠", C.yellow, "Mapa 3D indisponível aqui", "Este ambiente não conseguiu criar o mapa 3D (ViewportFrame/Camera). O resto do ECO funciona normalmente — só essa aba fica sem o mapa.", 90)
+end
+
+-- Aba Ajustes
+newHeader("cfg", "SOBRE")
+do
+	local aboutCard = newCard("cfg", "🎬", C.blue, "ECO", "Gravador de movimentos de parkour: grave, regrave trechos e reproduza seus percursos com precisão.\nCriado por 0tavio50.", 80)
+end
+
+newHeader("cfg", "SISTEMA")
+for _, a in ipairs(ACTIONS) do
+	if a.tab == "cfg" then
+		newActionCard(a)
+	end
+end
+
+local hideCard = newCard("cfg", "🙈", C.purple, "Esconder o botãozinho", "Com o painel minimizado, o 🎬 (e o ⚡) somem. O painel só abre pela tecla de «Minimizar / mostrar».", 78)
+ui.hideBtn = button({ Text = "", TextSize = 12, Size = UDim2.fromOffset(150, 40), Position = UDim2.new(1, -160, 0.5, -20) }, hideCard)
+corner(ui.hideBtn, 8)
+ui.hideBtn.MouseButton1Click:Connect(function()
+	settings.hideMini = not settings.hideMini
+	refreshSettings()
+	applyMiniVisibility()
+	markDirty()
+	if settings.hideMini then
+		setMsg("Botãozinho escondido: agora o painel só abre pela tecla [" .. keyName("toggle") .. "].", "ok")
+	else
+		setMsg("Botãozinho visível de novo quando o painel estiver minimizado.", "ok")
+	end
+end)
+
+newHeader("cfg", "MOVIMENTO E IMITAÇÃO")
+local modeCard = newCard("cfg", "🎯", C.blueDark, "Modo de movimento", "Teleporte: exato, melhor para parkour. Natural (experimental): anda de verdade; use se o jogo te puxar de volta.", 78)
+ui.modeBtn = button({ Text = "", RichText = true, TextSize = 14, Size = UDim2.fromOffset(150, 44), Position = UDim2.new(1, -160, 0.5, -22) }, modeCard)
+corner(ui.modeBtn, 8)
+ui.modeBtn.MouseButton1Click:Connect(function()
+	if state ~= "idle" then
+		busyMessage()
+		return
+	end
+	settings.mode = (settings.mode == "tp") and "nat" or "tp"
+	refreshSettings()
+	markDirty()
+	if settings.mode == "tp" then
+		setMsg("Modo Teleporte: a pose do personagem é aplicada exatamente a cada frame (máxima precisão).", "ok")
+	else
+		setMsg("Modo Natural (experimental): o personagem anda de verdade e é corrigido para seguir o trajeto gravado.", "ok")
+	end
+end)
+
+local tolCard = newCard("cfg", "📏", C.teal, "Tolerância do início", "Distância máxima (studs) do ponto inicial para imitar. Também vale para «encostar» no trajeto ao juntar.", 66)
+local tolBox = make("Frame", { Size = UDim2.fromOffset(150, 40), Position = UDim2.new(1, -160, 0.5, -20), BackgroundTransparency = 1 }, tolCard)
+local tolMinus = button({ Text = "−", TextSize = 20, BackgroundColor3 = C.panel, Size = UDim2.fromOffset(40, 40) }, tolBox)
+corner(tolMinus, 8)
+ui.tolLabel = label({ Text = "2.0", Font = Enum.Font.GothamBold, TextSize = 16, TextXAlignment = Enum.TextXAlignment.Center, Size = UDim2.fromOffset(60, 40), Position = UDim2.fromOffset(45, 0) }, tolBox)
+local tolPlus = button({ Text = "+", TextSize = 20, BackgroundColor3 = C.panel, Size = UDim2.fromOffset(40, 40), Position = UDim2.fromOffset(110, 0) }, tolBox)
+corner(tolPlus, 8)
+local function changeTolerance(delta)
+	settings.tolerance = math.clamp(settings.tolerance + delta, 0.5, 10)
+	refreshSettings()
+	markDirty()
+end
+tolMinus.MouseButton1Click:Connect(function()
+	changeTolerance(-0.5)
+end)
+tolPlus.MouseButton1Click:Connect(function()
+	changeTolerance(0.5)
+end)
+
+newHeader("cfg", "GUIAS NO MUNDO")
+local guideCard = newCard("cfg", "🧭", C.green, "Guias no mundo", "Disco verde = ponto inicial. Guia do trajeto: a linha colorida com pontinhos, ou um rastro de bonecos fantasmas andando em loop — você escolhe qual. Só você vê.", 148)
+ui.markerBtn = button({ Text = "", TextSize = 12, Size = UDim2.fromOffset(150, 32), Position = UDim2.new(1, -160, 0, 5) }, guideCard)
+corner(ui.markerBtn, 8)
+ui.pathBtn = button({ Text = "", TextSize = 12, Size = UDim2.fromOffset(150, 32), Position = UDim2.new(1, -160, 0, 37) }, guideCard)
+corner(ui.pathBtn, 8)
+ui.guideModeBtn = button({ Text = "", TextSize = 12, Size = UDim2.fromOffset(150, 32), Position = UDim2.new(1, -160, 0, 69) }, guideCard)
+corner(ui.guideModeBtn, 8)
+local dummyIntBox = make("Frame", { Size = UDim2.fromOffset(150, 30), Position = UDim2.new(1, -160, 0, 107), BackgroundTransparency = 1 }, guideCard)
+local dummyIntMinus = button({ Text = "−", TextSize = 18, BackgroundColor3 = C.panel, Size = UDim2.fromOffset(34, 30) }, dummyIntBox)
+corner(dummyIntMinus, 8)
+ui.dummyIntLabel = label({ Text = "", Font = Enum.Font.GothamBold, TextSize = 11, TextXAlignment = Enum.TextXAlignment.Center, Size = UDim2.fromOffset(76, 30), Position = UDim2.fromOffset(37, 0) }, dummyIntBox)
+local dummyIntPlus = button({ Text = "+", TextSize = 18, BackgroundColor3 = C.panel, Size = UDim2.fromOffset(34, 30), Position = UDim2.fromOffset(116, 0) }, dummyIntBox)
+corner(dummyIntPlus, 8)
+ui.markerBtn.MouseButton1Click:Connect(function()
+	settings.marker = not settings.marker
+	refreshSettings()
+	pcall(updateMarker)
+	markDirty()
+end)
+ui.pathBtn.MouseButton1Click:Connect(function()
+	settings.path = not settings.path
+	refreshSettings()
+	pcall(updatePath)
+	markDirty()
+	if settings.path and not (selected and recs[selected]) then
+		setMsg("Trajeto ligado. Selecione uma gravação na lista para ver o caminho no mundo.", "info")
+	end
+end)
+ui.guideModeBtn.MouseButton1Click:Connect(function()
+	settings.guideMode = (settings.guideMode == "dummy") and "line" or "dummy"
+	refreshSettings()
+	pcall(updatePath)
+	markDirty()
+	if settings.guideMode == "dummy" then
+		setMsg("Guia do trajeto agora é o rastro de bonecos fantasmas, andando o trajeto em loop.", "ok")
+	else
+		setMsg("Guia do trajeto voltou a ser a linha colorida com pontinhos.", "ok")
+	end
+end)
+local function changeDummyInterval(delta)
+	settings.dummyInterval = math.clamp(math.round((settings.dummyInterval + delta) * 10) / 10, 0.5, 10)
+	refreshSettings()
+	pcall(updatePath)
+	markDirty()
+end
+dummyIntMinus.MouseButton1Click:Connect(function()
+	changeDummyInterval(-0.5)
+end)
+dummyIntPlus.MouseButton1Click:Connect(function()
+	changeDummyInterval(0.5)
+end)
+
+newHeader("cfg", "SALVAMENTO")
+local saveCard, saveDesc = newCard("cfg", "💾", C.green, "Salvamento automático", "", 88)
+ui.saveDesc = saveDesc
+ui.autoBtn = button({ Text = "", TextSize = 12, Size = UDim2.fromOffset(150, 34), Position = UDim2.new(1, -160, 0, 8) }, saveCard)
+corner(ui.autoBtn, 8)
+ui.saveNowBtn = button({ Text = "💾 Salvar agora", TextSize = 12, BackgroundColor3 = C.blueDark, Size = UDim2.fromOffset(150, 34), Position = UDim2.new(1, -160, 0, 46) }, saveCard)
+corner(ui.saveNowBtn, 8)
+ui.autoBtn.MouseButton1Click:Connect(function()
+	settings.autosave = not settings.autosave
+	refreshSettings()
+	if settings.autosave then
+		markDirty(true)
+		setMsg(canFile and "Auto-salvar ligado: suas gravações são guardadas sozinhas." or "Auto-salvar ligado, mas este ambiente não permite criar arquivos (use «Exportar todas»).", canFile and "ok" or "warn")
+	else
+		setMsg("Auto-salvar desligado. Use «Salvar agora» quando quiser.", "info")
+	end
+end)
+ui.saveNowBtn.MouseButton1Click:Connect(safe(function()
+	if state == "recording" then
+		busyMessage()
+		return
+	end
+	saveNow(true)
+end))
+
+-- Rodapé: mensagens
+ui.msgFrame = make("Frame", { Size = UDim2.new(1, -32, 0, 52), Position = UDim2.new(0, 16, 1, -64), BackgroundColor3 = MSG_COLORS.info[1] }, main)
+corner(ui.msgFrame, 12)
+ui.msgLabel = label({
+	Text = "",
+	TextSize = 14,
+	TextWrapped = true,
+	Size = UDim2.new(1, -24, 1, 0),
+	Position = UDim2.fromOffset(14, 0),
+}, ui.msgFrame)
+
+-- Janela para dar nome (salvar / renomear): fica direto na tela, funciona mesmo com o painel minimizado
+ui.overlay = make("Frame", {
+	Name = "JanelaDeNome",
+	Size = UDim2.fromScale(1, 1),
+	BackgroundColor3 = Color3.new(0, 0, 0),
+	BackgroundTransparency = 0.5,
+	Visible = false,
+	Active = true,
+	ZIndex = 100,
+}, gui)
+
+local dlg = make("Frame", {
+	Size = UDim2.fromOffset(440, 240),
+	AnchorPoint = Vector2.new(0.5, 0.5),
+	Position = UDim2.fromScale(0.5, 0.5),
+	BackgroundColor3 = C.panel,
+}, ui.overlay)
+corner(dlg, 14)
+make("UIStroke", { Color = C.blue, Thickness = 2 }, dlg)
+addScale(make("UIScale", {}, dlg), 480, 300)
+ui.nameTitle = label({ Text = "💾 Salvar gravação", Font = Enum.Font.GothamBold, TextSize = 20, Size = UDim2.new(1, -40, 0, 28), Position = UDim2.fromOffset(20, 16) }, dlg)
+ui.nameInfo = label({ Text = "", TextSize = 12, TextColor3 = C.sub, Size = UDim2.new(1, -40, 0, 16), Position = UDim2.fromOffset(20, 46), TextTruncate = Enum.TextTruncate.AtEnd }, dlg)
+label({ Text = "Digite o nome:", TextSize = 13, Size = UDim2.new(1, -40, 0, 18), Position = UDim2.fromOffset(20, 80) }, dlg)
+ui.nameBox = make("TextBox", {
+	Text = "",
+	PlaceholderText = "Ex.: Pulo do parkour 1",
+	ClearTextOnFocus = false,
+	Font = Enum.Font.GothamMedium,
+	TextSize = 16,
+	TextColor3 = C.text,
+	PlaceholderColor3 = C.sub,
+	BackgroundColor3 = C.card,
+	TextXAlignment = Enum.TextXAlignment.Left,
+	Size = UDim2.new(1, -40, 0, 40),
+	Position = UDim2.fromOffset(20, 102),
+}, dlg)
+corner(ui.nameBox, 8)
+make("UIPadding", { PaddingLeft = UDim.new(0, 12), PaddingRight = UDim.new(0, 12) }, ui.nameBox)
+
+ui.nameSave = button({ Text = "💾  Salvar (Enter)", BackgroundColor3 = C.green, TextSize = 15, Size = UDim2.new(0.5, -26, 0, 44), Position = UDim2.new(0, 20, 1, -64) }, dlg)
+corner(ui.nameSave, 10)
+ui.nameCancel = button({ Text = "Descartar", BackgroundColor3 = C.red, TextSize = 15, Size = UDim2.new(0.5, -26, 0, 44), Position = UDim2.new(0.5, 6, 1, -64) }, dlg)
+corner(ui.nameCancel, 10)
+
+ui.nameSave.MouseButton1Click:Connect(safe(confirmName))
+ui.nameCancel.MouseButton1Click:Connect(safe(cancelName))
+ui.nameBox.FocusLost:Connect(function(enterPressed)
+	if enterPressed then
+		safe(confirmName)()
+	end
+end)
+
+-- Janela de exportar / importar
+ui.ioOverlay = make("Frame", {
+	Size = UDim2.fromScale(1, 1),
+	BackgroundColor3 = Color3.new(0, 0, 0),
+	BackgroundTransparency = 0.4,
+	Visible = false,
+	Active = true,
+	ZIndex = 30,
+}, main)
+corner(ui.ioOverlay, 16)
+
+local ioDlg = make("Frame", {
+	Size = UDim2.fromOffset(580, 400),
+	AnchorPoint = Vector2.new(0.5, 0.5),
+	Position = UDim2.fromScale(0.5, 0.5),
+	BackgroundColor3 = C.panel,
+}, ui.ioOverlay)
+corner(ioDlg, 14)
+make("UIStroke", { Color = C.blue, Thickness = 2 }, ioDlg)
+ui.ioTitle = label({ Text = "", Font = Enum.Font.GothamBold, TextSize = 20, Size = UDim2.new(1, -40, 0, 28), Position = UDim2.fromOffset(20, 16), TextTruncate = Enum.TextTruncate.AtEnd }, ioDlg)
+ui.ioHelp = label({ Text = "", TextSize = 13, TextColor3 = C.sub, TextWrapped = true, TextYAlignment = Enum.TextYAlignment.Top, Size = UDim2.new(1, -40, 0, 44), Position = UDim2.fromOffset(20, 48) }, ioDlg)
+ui.ioBox = make("TextBox", {
+	Text = "",
+	PlaceholderText = "Cole aqui o texto da gravação exportada…",
+	ClearTextOnFocus = false,
+	MultiLine = true,
+	TextWrapped = true,
+	Font = Enum.Font.Code,
+	TextSize = 12,
+	TextColor3 = C.text,
+	PlaceholderColor3 = C.sub,
+	BackgroundColor3 = C.card,
+	TextXAlignment = Enum.TextXAlignment.Left,
+	TextYAlignment = Enum.TextYAlignment.Top,
+	Size = UDim2.new(1, -40, 0, 220),
+	Position = UDim2.fromOffset(20, 100),
+}, ioDlg)
+corner(ui.ioBox, 8)
+make("UIPadding", { PaddingLeft = UDim.new(0, 10), PaddingRight = UDim.new(0, 10), PaddingTop = UDim.new(0, 8), PaddingBottom = UDim.new(0, 8) }, ui.ioBox)
+
+ui.ioAction = button({ Text = "", BackgroundColor3 = C.green, TextSize = 14, Size = UDim2.fromOffset(172, 44), Position = UDim2.new(0, 20, 1, -64) }, ioDlg)
+corner(ui.ioAction, 10)
+ui.ioToggle = button({ Text = "", BackgroundColor3 = C.blueDark, TextSize = 14, Size = UDim2.fromOffset(172, 44), Position = UDim2.new(0, 204, 1, -64) }, ioDlg)
+corner(ui.ioToggle, 10)
+local ioClose = button({ Text = "Fechar", BackgroundColor3 = C.red, TextSize = 14, Size = UDim2.fromOffset(172, 44), Position = UDim2.new(0, 388, 1, -64) }, ioDlg)
+corner(ioClose, 10)
+ui.ioAction.MouseButton1Click:Connect(safe(runIOAction))
+ui.ioToggle.MouseButton1Click:Connect(function()
+	if ui.ioMode ~= "export" then
+		return
+	end
+	if not (selected and recs[selected]) then
+		ui.ioAll = true
+	else
+		ui.ioAll = not ui.ioAll
+	end
+	fillExport()
+end)
+ioClose.MouseButton1Click:Connect(closeIO)
+
+updateScale()
+if workspace.CurrentCamera then
+	onGlobal(workspace.CurrentCamera:GetPropertyChangedSignal("ViewportSize"), updateScale)
+end
+
+----------------------------------------------------------------------
+-- ATALHOS DE TECLADO
+----------------------------------------------------------------------
+onGlobal(UserInputService.InputBegan, function(input, gameProcessed)
+	if input.UserInputType ~= Enum.UserInputType.Keyboard then
+		return -- mouse (inclusive botão direito) e toque nunca disparam atalhos
+	end
+	if rebindingId then
+		handleRebind(input)
+		return
+	end
+	if gameProcessed then
+		return -- está digitando em alguma caixa de texto
+	end
+	for _, a in ipairs(ACTIONS) do
+		if binds[a.id] == input.KeyCode then
+			-- sistema desligado: nenhum atalho funciona (menos a tecla de minimizar/mostrar quando o
+			-- botãozinho está escondido — senão você ficaria sem como abrir o painel)
+			if enabled or (a.id == "toggle" and settings.hideMini) then
+				a.fn()
+			end
+			return
+		end
+	end
+end)
+
+----------------------------------------------------------------------
+-- MEDIDORES AO VIVO + PONTOS A/B NO MUNDO + ANIMAÇÃO DO BONECO-GUIA
+----------------------------------------------------------------------
+local infoAcc = 0
+local dummyAcc = 0
+-- anima o boneco-guia (~30x por segundo — não precisa ser todo frame pra ficar suave)
+onGlobal(RunService.Heartbeat, function(dt)
+	if #dummies == 0 then
+		return
+	end
+	-- otimização: a pose do boneco-guia só precisa atualizar ~30x por segundo (não todo frame) para continuar suave
+	dummyAcc += dt or (1 / 60)
+	if dummyAcc < 1 / 30 then
+		return
+	end
+	dummyAcc = 0
+	if not enabled or not settings.path or settings.guideMode ~= "dummy" or dummiesRec ~= (selected and recs[selected]) or (ui.tab == "edit" and recTarget) then
+		clearDummyGuide()
+		return
+	end
+	local dur = math.max(dummiesRec.duration, 0.05)
+	local now = os.clock()
+	for _, d in ipairs(dummies) do
+		local okP = pcall(poseDummy, d, (now - d.phase) % dur)
+		if not okP then
+			clearDummyGuide()
+			break
+		end
+	end
+end)
+
+onGlobal(RunService.Heartbeat, function(dt)
+	infoAcc += dt
+	if infoAcc < 0.1 then
+		return
+	end
+	infoAcc = 0
+	if ui.cutDirty then
+		ui.cutDirty = false
+		pcall(updateCutMarkers)
+	end
+	if ui.main.Visible then
+		pcall(updateSummary)
+		if ui.tab == "play" then
+			pcall(updateInfo)
+		elseif ui.tab == "edit" then
+			pcall(updateEditInfo)
+		elseif ui.tab == "analysis" then
+			if ui.anaDirty then
+				ui.anaDirty = false
+				pcall(ui.drawAnalysis)
+			end
+			pcall(ui.updateAnalysisInfo)
+			pcall(ui.updateAnalysisLive)
+		end
+	end
+end)
+
+----------------------------------------------------------------------
+-- CARREGAR DO ARQUIVO + SALVAR AO SAIR
+----------------------------------------------------------------------
+local function loadFromDisk()
+	if not canFile then
+		setMsg("Bem-vindo! Atenção: este ambiente não permite criar arquivos, então as gravações NÃO ficam salvas ao sair. Use «Exportar» → «Exportar todas» para guardá-las.", "warn")
+		return
+	end
+	local exists = true
+	if type(isfile) == "function" then
+		local okE, res = pcall(isfile, FILE)
+		exists = okE and res
+	end
+	if not exists then
+		setMsg("Bem-vindo! Suas gravações serão salvas sozinhas num arquivo local. Comece pela aba «Gravar».", "info")
+		return
+	end
+	local okR, raw = pcall(readfile, FILE)
+	if not okR or type(raw) ~= "string" or raw == "" then
+		setMsg("Bem-vindo! Não consegui ler o arquivo de salvamento; começando do zero.", "warn")
+		return
+	end
+	local okJ, data = pcall(function()
+		return HttpService:JSONDecode(raw)
+	end)
+	if not okJ or type(data) ~= "table" then
+		pcall(writefile, FILE .. ".bak", raw) -- guarda uma cópia antes de qualquer novo salvamento
+		setMsg("O arquivo de salvamento estava corrompido; guardei uma cópia (.bak) e comecei do zero.", "err")
+		return
+	end
+
+	store.loading = true
+	state = "loading"
+	setStatus("Carregando…", C.teal)
+	setMsg("Carregando suas gravações salvas…", "info")
+
+	local cfg = data.cfg
+	if type(cfg) == "table" then
+		if cfg.mode == "tp" or cfg.mode == "nat" then
+			settings.mode = cfg.mode
+		end
+		if type(cfg.tolerance) == "number" then
+			settings.tolerance = math.clamp(cfg.tolerance, 0.5, 10)
+		end
+		if type(cfg.straightTol) == "number" then
+			settings.straightTol = math.clamp(cfg.straightTol, 0.2, 3)
+		end
+		if cfg.guideMode == "line" or cfg.guideMode == "dummy" then
+			settings.guideMode = cfg.guideMode
+		end
+		if type(cfg.dummyInterval) == "number" then
+			settings.dummyInterval = math.clamp(cfg.dummyInterval, 0.5, 10)
+		end
+		for _, k in ipairs({ "marker", "path", "autosave", "stopAtCut", "editCopy", "editFree", "hideMini", "straighten", "walkGoto" }) do
+			if type(cfg[k]) == "boolean" then
+				settings[k] = cfg[k]
+			end
+		end
+		if type(cfg.binds) == "table" then
+			local newBinds = {}
+			for id, nm in pairs(cfg.binds) do
+				if ACTION_BY_ID[id] and type(nm) == "string" then
+					local okK, kc = pcall(function()
+						return Enum.KeyCode[nm]
+					end)
+					if okK and kc and kc ~= Enum.KeyCode.Unknown and not BLOCKED_KEYS[kc] then
+						newBinds[id] = kc
+					end
+				end
+			end
+			local seen, valid = {}, true
+			for _, a in ipairs(ACTIONS) do
+				local kc = newBinds[a.id] or binds[a.id]
+				if seen[kc] then
+					valid = false
+					break
+				end
+				seen[kc] = true
+			end
+			if valid then
+				for id, kc in pairs(newBinds) do
+					binds[id] = kc
+				end
+			end
+		end
+	end
+
+	local loaded, failed = 0, 0
+	if type(data.recs) == "table" then
+		for i, d in ipairs(data.recs) do
+			local ok, rec = pcall(decodeRecTable, d, "Gravação " .. i, 600)
+			if ok and rec then
+				recs[#recs + 1] = rec
+				loaded += 1
+			else
+				failed += 1
+			end
+			task.wait()
+		end
+	end
+	if type(cfg) == "table" and type(cfg.selected) == "string" then
+		for i, r in ipairs(recs) do
+			if r.name == cfg.selected then
+				selected = i
+			end
+		end
+	end
+
+	store.loading = false
+	store.dirty = false
+	state = "idle"
+	setStatus("Pronto", C.green)
+	refreshKeys()
+	refreshHelp()
+	refreshSettings()
+	refreshStoreInfo()
+	renderList()
+	local extra = (failed > 0) and (" (" .. failed .. " não puderam ser lidas)") or ""
+	if loaded > 0 then
+		setMsg(string.format("%d gravação(ões) carregadas do arquivo!%s Selecione uma na lista.", loaded, extra), "ok")
+	else
+		setMsg("Bem-vindo! Comece pela aba «Gravar». Clique no botão «TECLA» de qualquer ação para trocar o atalho." .. extra, "info")
+	end
+end
+
+local function flushOnExit()
+	if not closed and store.dirty and canFile and settings.autosave and not store.loading then
+		pcall(saveNow, false)
+	end
+end
+onGlobal(Players.PlayerRemoving, function(p)
+	if p == player then
+		flushOnExit()
+	end
+end)
+onGlobal(player.AncestryChanged, function(_, parent)
+	if not parent then
+		flushOnExit()
+	end
+end)
+gui.Destroying:Connect(flushOnExit)
+pcall(function()
+	game:BindToClose(flushOnExit)
+end)
+
+-- rede de segurança: a cada 20s, tenta salvar o que ficou pendente
+task.spawn(function()
+	while gui.Parent and not closed do
+		task.wait(20)
+		if not closed and store.dirty and canFile and settings.autosave and not store.loading and state ~= "recording" then
+			saveNow(false)
+		end
+	end
+end)
+
+----------------------------------------------------------------------
+-- INÍCIO
+----------------------------------------------------------------------
+refreshKeys()
+refreshHelp()
+refreshSettings()
+refreshStoreInfo()
+renderList()
+selectTab("rec")
+refreshPower()
+setMsg("Bem-vindo ao ECO! Comece pela aba «Gravar». Arraste esta barra para mover a janela; clique no botão «TECLA» de qualquer ação para trocar o atalho.", "info")
+task.spawn(loadFromDisk)
