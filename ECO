@@ -88,17 +88,19 @@ local PathfindingService = game:GetService("PathfindingService")
 local player = Players.LocalPlayer
 local playerGui = player:WaitForChild("PlayerGui")
 
--- se o script rodar de novo, remove a janela antiga
-do
-	local old = playerGui:FindFirstChild("GravadorDeMovimentos")
-	if old then
-		old:Destroy()
+-- ENVELOPE DE SEGURANÇA: se QUALQUER coisa dentro der erro, mostra na tela em vez de sumir sem avisar
+local ecoOk, ecoErr = pcall(function()
+	-- se o script rodar de novo, remove a janela antiga
+	do
+		local old = playerGui:FindFirstChild("GravadorDeMovimentos")
+		if old then
+			old:Destroy()
+		end
 	end
-end
 
-----------------------------------------------------------------------
--- CONFIGURAÇÕES
-----------------------------------------------------------------------
+	----------------------------------------------------------------------
+	-- CONFIGURAÇÕES
+	----------------------------------------------------------------------
 local MAX_NOME = 40
 local COUNTDOWN = 3 -- segundos de contagem antes de regravar um trecho
 local FOLDER = "GravadorDeMovimentos"
@@ -122,20 +124,21 @@ local settings = {
 	dummyInterval = 2, -- segundos entre cada boneco do rastro (menor = mais bonecos andando o trajeto ao mesmo tempo)
 }
 
+-- Paleta "HUD de jogo": base escura quase preta + acentos neon vibrantes (ciano, magenta, âmbar)
 local C = {
-	bg = Color3.fromRGB(22, 24, 32),
-	panel = Color3.fromRGB(32, 35, 47),
-	card = Color3.fromRGB(40, 44, 60),
-	cardHover = Color3.fromRGB(52, 57, 80),
-	text = Color3.fromRGB(240, 242, 250),
-	sub = Color3.fromRGB(150, 158, 180),
-	green = Color3.fromRGB(60, 190, 115),
-	red = Color3.fromRGB(232, 84, 84),
-	blue = Color3.fromRGB(79, 140, 255),
-	blueDark = Color3.fromRGB(48, 86, 170),
-	teal = Color3.fromRGB(50, 170, 200),
-	yellow = Color3.fromRGB(245, 190, 70),
-	purple = Color3.fromRGB(150, 110, 240),
+	bg = Color3.fromRGB(8, 10, 16),
+	panel = Color3.fromRGB(14, 18, 28),
+	card = Color3.fromRGB(20, 25, 38),
+	cardHover = Color3.fromRGB(28, 35, 52),
+	text = Color3.fromRGB(232, 242, 250),
+	sub = Color3.fromRGB(120, 150, 175),
+	green = Color3.fromRGB(70, 235, 150),
+	red = Color3.fromRGB(255, 70, 100),
+	blue = Color3.fromRGB(45, 150, 255),
+	blueDark = Color3.fromRGB(25, 85, 170),
+	teal = Color3.fromRGB(0, 225, 225),
+	yellow = Color3.fromRGB(255, 195, 35),
+	purple = Color3.fromRGB(200, 90, 255),
 	white = Color3.fromRGB(255, 255, 255),
 }
 
@@ -165,7 +168,7 @@ local pending = nil -- gravação aguardando nome
 local recTarget = nil -- preenchido quando estamos regravando um trecho
 local edit = { rec = nil, a = 0, b = 0 } -- pontos A e B (em segundos) da aba Regravar
 local store = { dirty = false, token = 0, loading = false, lastSave = nil }
-local ui = { keyBtns = {}, tabBtns = {}, tabFrames = {}, sliders = {}, tab = "rec", minimized = false, cutDirty = false }
+local ui = { keyBtns = {}, tabBtns = {}, tabFrames = {}, tabGlow = {}, sliders = {}, tab = "rec", minimized = false, cutDirty = false }
 
 local recFrames, recTime, recStart, recConn, recAnimator
 local playConn, playConn2, playConn3, playHum, playOldAuto
@@ -2818,8 +2821,8 @@ local main = make("Frame", {
 	Active = true,
 }, gui)
 corner(main, 16)
-make("UIStroke", { Color = C.card, Thickness = 2 }, main)
-make("UIGradient", { Color = ColorSequence.new(Color3.fromRGB(255, 255, 255), Color3.fromRGB(205, 208, 225)), Rotation = 90 }, main)
+make("UIStroke", { Color = C.teal, Thickness = 1.5, Transparency = 0.35 }, main)
+make("UIGradient", { Color = ColorSequence.new(Color3.fromRGB(26, 30, 44), Color3.fromRGB(12, 14, 22)), Rotation = 90 }, main)
 ui.main = main
 
 local uiScale = make("UIScale", {}, main)
@@ -2993,9 +2996,9 @@ ui.countHint.TextStrokeTransparency = 0.35
 local titleBar = make("Frame", { Size = UDim2.new(1, 0, 0, 56), BackgroundTransparency = 1, Active = true }, main)
 label({ Text = "🎬 ECO", Font = Enum.Font.GothamBold, TextSize = 21, Size = UDim2.fromOffset(276, 26), Position = UDim2.fromOffset(20, 6) }, titleBar)
 label({ Text = "Gravador de parkour  •  por 0tavio50", TextSize = 12, TextColor3 = C.sub, Size = UDim2.fromOffset(276, 18), Position = UDim2.fromOffset(20, 32), TextTruncate = Enum.TextTruncate.AtEnd }, titleBar)
-local accent = make("Frame", { Size = UDim2.new(1, -32, 0, 2), Position = UDim2.fromOffset(16, 56), BackgroundColor3 = C.blue }, main)
-corner(accent, 1)
-make("UIGradient", { Color = ColorSequence.new(C.blue, C.teal) }, accent)
+local accent = make("Frame", { Size = UDim2.new(1, -32, 0, 3), Position = UDim2.fromOffset(16, 56), BackgroundColor3 = C.teal }, main)
+corner(accent, 2)
+make("UIGradient", { Color = ColorSequence.new({ ColorSequenceKeypoint.new(0, C.teal), ColorSequenceKeypoint.new(0.5, C.blue), ColorSequenceKeypoint.new(1, C.purple) }) }, accent)
 makeDraggable(titleBar, main, uiScale, nil)
 
 local pill = make("Frame", { Size = UDim2.fromOffset(178, 32), Position = UDim2.new(1, -322, 0, 12), BackgroundColor3 = C.panel }, titleBar)
@@ -3173,7 +3176,9 @@ local tabCounters = {}
 for i, tab in ipairs(TABS) do
 	local btn = button({ Text = tab.text, TextSize = 13, BackgroundColor3 = C.panel, Size = UDim2.fromOffset(103, 38), LayoutOrder = i }, tabBar)
 	corner(btn, 10)
+	local glow = make("UIStroke", { Color = C.teal, Thickness = 1.5, Transparency = 1 }, btn)
 	ui.tabBtns[tab.id] = btn
+	ui.tabGlow[tab.id] = glow
 
 	local frame = make("ScrollingFrame", {
 		Size = UDim2.new(1, 0, 1, -106),
@@ -3198,6 +3203,7 @@ local function selectTab(id)
 	for tid, btn in pairs(ui.tabBtns) do
 		btn.BackgroundColor3 = (tid == id) and C.blue or C.panel
 		btn.TextColor3 = (tid == id) and C.white or C.sub
+		ui.tabGlow[tid].Transparency = (tid == id) and 0.2 or 1
 	end
 	if id == "play" then
 		updateInfo()
@@ -4385,3 +4391,72 @@ selectTab("rec")
 refreshPower()
 setMsg("Bem-vindo ao ECO! Comece pela aba «Gravar». Arraste esta barra para mover a janela; clique no botão «TECLA» de qualquer ação para trocar o atalho.", "info")
 task.spawn(loadFromDisk)
+
+end) -- fim do envelope de segurança
+
+if not ecoOk then
+	warn("[ECO] ERRO FATAL ao iniciar: " .. tostring(ecoErr))
+	local okUI = pcall(function()
+		local errGui = Instance.new("ScreenGui")
+		errGui.Name = "ECO_ErroFatal"
+		errGui.ResetOnSpawn = false
+		errGui.IgnoreGuiInset = true
+		errGui.Parent = playerGui
+		local frame = Instance.new("Frame")
+		frame.Size = UDim2.fromOffset(600, 260)
+		frame.Position = UDim2.fromScale(0.5, 0.5)
+		frame.AnchorPoint = Vector2.new(0.5, 0.5)
+		frame.BackgroundColor3 = Color3.fromRGB(20, 10, 12)
+		frame.BorderSizePixel = 0
+		frame.Active = true
+		frame.Parent = errGui
+		local corner = Instance.new("UICorner")
+		corner.CornerRadius = UDim.new(0, 12)
+		corner.Parent = frame
+		local stroke = Instance.new("UIStroke")
+		stroke.Color = Color3.fromRGB(255, 70, 100)
+		stroke.Thickness = 2
+		stroke.Parent = frame
+		local title = Instance.new("TextLabel")
+		title.BackgroundTransparency = 1
+		title.Size = UDim2.new(1, -24, 0, 30)
+		title.Position = UDim2.fromOffset(12, 10)
+		title.Font = Enum.Font.GothamBold
+		title.TextSize = 18
+		title.TextColor3 = Color3.fromRGB(255, 130, 150)
+		title.TextXAlignment = Enum.TextXAlignment.Left
+		title.Text = "⚠ O ECO não conseguiu iniciar — manda isto pro Claude:"
+		title.Parent = frame
+		local body = Instance.new("TextLabel")
+		body.BackgroundTransparency = 1
+		body.Size = UDim2.new(1, -24, 1, -90)
+		body.Position = UDim2.fromOffset(12, 44)
+		body.Font = Enum.Font.Code
+		body.TextSize = 15
+		body.TextColor3 = Color3.fromRGB(255, 255, 255)
+		body.TextWrapped = true
+		body.TextXAlignment = Enum.TextXAlignment.Left
+		body.TextYAlignment = Enum.TextYAlignment.Top
+		body.Text = tostring(ecoErr)
+		body.Parent = frame
+		local closeBtn = Instance.new("TextButton")
+		closeBtn.Size = UDim2.fromOffset(120, 34)
+		closeBtn.Position = UDim2.new(1, -132, 1, -46)
+		closeBtn.BackgroundColor3 = Color3.fromRGB(255, 70, 100)
+		closeBtn.Font = Enum.Font.GothamBold
+		closeBtn.TextSize = 14
+		closeBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
+		closeBtn.AutoButtonColor = true
+		closeBtn.Text = "Fechar"
+		closeBtn.Parent = frame
+		local btnCorner = Instance.new("UICorner")
+		btnCorner.CornerRadius = UDim.new(0, 8)
+		btnCorner.Parent = closeBtn
+		closeBtn.MouseButton1Click:Connect(function()
+			errGui:Destroy()
+		end)
+	end)
+	if not okUI then
+		warn("[ECO] (e nem consegui mostrar a tela de erro neste ambiente)")
+	end
+end
