@@ -1,13 +1,13 @@
 --!nolint UnknownGlobal
 --[[
-	🎬 ECO  —  Gravador de Movimentos (LocalScript único)  —  por 0tavio50
+	◈ Eco do Movimento  —  LocalScript único  —  por 0tavio50
 	Onde colocar: StarterPlayer > StarterPlayerScripts  (tipo LocalScript)
 
 	ABAS
-	  🎥 Gravar      → gravar (iniciar / parar e salvar com nome) + «Linhas mais retas»
+	  ⏺ Gravar      → gravar (iniciar / parar e salvar com nome) + «Linhas mais retas»
 	  ✂ Regravar     → refaz só uma parte de uma gravação ou grava um novo início que se junta ao trajeto antigo
 	  ▶ Reproduzir   → ir ao ponto inicial (teleporte ou andando), imitar, medidor de distância ao vivo
-	  📊 Análise     → números, mapa do trajeto visto de cima e gráfico de velocidade da gravação selecionada
+	  ▂▅█ Análise     → números, mapa do trajeto visto de cima e gráfico de velocidade da gravação selecionada
 	  ⚙ Ajustes      → sistema, movimento, guias no mundo e salvamento
 	  A faixa no topo mostra sempre a gravação selecionada, a distância até o início e o modo.
 
@@ -47,12 +47,12 @@
 	    • «Manter o final a partir de» → tudo depois desse ponto (B) é mantido
 	  O que está entre A e B é regravado. A = 0 refaz o começo; B = fim refaz o final.
 	  Dois pilares aparecem no mundo (ciano = A, amarelo = B) para você ver o momento exato.
-	  «📍 Aqui» marca A ou B no ponto do trajeto que fica mais perto de onde você está.
+	  «⊙ Aqui» marca A ou B no ponto do trajeto que fica mais perto de onde você está.
 	  Opção «Início: onde estou»: sem teleporte, a regravação começa de onde você estiver
 	  (ideal para refazer o começo). O trecho novo é emendado ao resto da gravação.
 
 	ESCONDER O BOTÃOZINHO / FECHAR O SCRIPT
-	  Ajustes → «Esconder o botãozinho»: com o painel minimizado, o 🎬 (e o ⚡) somem e o painel só abre
+	  Ajustes → «Esconder o botãozinho»: com o painel minimizado, o ◈ (e o ⏻) somem e o painel só abre
 	  pela tecla de «Minimizar / mostrar» (H por padrão — ela funciona até com o sistema desligado).
 	  Botão «X» no canto da janela: salva tudo e remove o script por completo (janela, guias, atalhos).
 
@@ -62,10 +62,10 @@
 	  é descartado e o resto do trajeto antigo continua dali até o final. (Use «Desfazer» se não gostar.)
 
 	DUPLICAR
-	  O botão «📑 Duplicar» cria uma cópia da gravação selecionada, com nome automático «… (cópia)».
+	  O botão «⧉ Duplicar» cria uma cópia da gravação selecionada, com nome automático «… (cópia)».
 
 	LIGAR / DESLIGAR
-	  O botão «⚡» no topo da janela (e o botãozinho ⚡ ao lado do 🎬 minimizado) liga e desliga o sistema.
+	  O botão «⏻» no topo da janela (e o botãozinho ⏻ ao lado do ◈ minimizado) liga e desliga o sistema.
 	  Desligado: nenhum atalho (F, R, T, G, V, Y, H…) funciona e os guias somem do mundo.
 
 	CONTAGEM
@@ -116,7 +116,7 @@ local settings = {
 	stopAtCut = true, -- ao regravar o começo/meio, para sozinho ao chegar no ponto B
 	editCopy = false, -- regravar cria uma cópia em vez de substituir a original
 	editFree = false, -- regravar começa de onde você está (sem teleporte até o ponto A)
-	hideMini = false, -- esconde o botãozinho 🎬 quando o painel está minimizado (só abre pela tecla)
+	hideMini = false, -- esconde o botãozinho ◈ quando o painel está minimizado (só abre pela tecla)
 	straighten = false, -- ao gravar, deixa o trajeto mais reto (tira o «tremido» lateral do andar)
 	straightTol = 0.6, -- força das linhas retas (studs): maior = mais reto, porém mais diferente do original
 	walkGoto = false, -- «Ir ao ponto inicial» anda (calcula a rota e contorna, pulando se precisar) em vez de teleportar
@@ -143,10 +143,10 @@ local C = {
 }
 
 local MSG_COLORS = {
-	info = { Color3.fromRGB(36, 46, 78), "💡" },
-	ok = { Color3.fromRGB(30, 66, 50), "✅" },
-	warn = { Color3.fromRGB(80, 64, 26), "⚠️" },
-	err = { Color3.fromRGB(84, 36, 40), "❌" },
+	info = { Color3.fromRGB(36, 46, 78), "ℹ" },
+	ok = { Color3.fromRGB(30, 66, 50), "✔" },
+	warn = { Color3.fromRGB(80, 64, 26), "⚠" },
+	err = { Color3.fromRGB(84, 36, 40), "✕" },
 }
 
 local BLOCKED_KEYS = {
@@ -159,7 +159,7 @@ local BLOCKED_KEYS = {
 ----------------------------------------------------------------------
 -- idle | recording | naming | playing | walking | countdown | io | loading
 local state = "idle"
-local enabled = true -- chave geral ⚡: desligada, nenhum atalho funciona
+local enabled = true -- chave geral ⏻: desligada, nenhum atalho funciona
 local recs = {} -- { {name=, frames={}, duration=, undo=} }
 local selected = nil -- índice da gravação selecionada
 local binds = {} -- id -> Enum.KeyCode
@@ -168,7 +168,7 @@ local pending = nil -- gravação aguardando nome
 local recTarget = nil -- preenchido quando estamos regravando um trecho
 local edit = { rec = nil, a = 0, b = 0 } -- pontos A e B (em segundos) da aba Regravar
 local store = { dirty = false, token = 0, loading = false, lastSave = nil }
-local ui = { keyBtns = {}, tabBtns = {}, tabFrames = {}, tabGlow = {}, sliders = {}, tab = "rec", minimized = false, cutDirty = false }
+local ui = { keyBtns = {}, tabBtns = {}, tabFrames = {}, tabGlow = {}, tabLabels = {}, sliders = {}, tab = "rec", minimized = false, cutDirty = false }
 
 local recFrames, recTime, recStart, recConn, recAnimator
 local playConn, playConn2, playConn3, playHum, playOldAuto
@@ -1210,28 +1210,25 @@ local function refreshKeys()
 end
 
 local function refreshHelp()
-	if ui.recHelp then
-		ui.recHelp.Text = table.concat({
-			"<b>Como gravar</b>",
-			"1. Posicione o personagem onde a gravação deve começar (parado e virado para a direção certa).",
-			"2. Pressione [" .. keyName("start") .. "] e faça o movimento.",
-			"3. Pressione [" .. keyName("stop") .. "], dê um nome e salve.",
-			"",
-			"<b>Como imitar</b> (aba Reproduzir)",
-			"Selecione a gravação na lista → [" .. keyName("goto") .. "] vai ao início → [" .. keyName("play") .. "] imita.",
-			"",
-			"<b>Ficou ruim só uma parte?</b> Use a aba «Regravar».",
-			"<b>Começar de outro lugar?</b> Aba «Regravar» → «Novo início».",
-			"<b>Trajeto tremido?</b> «Linhas mais retas», aqui na aba Gravar.",
-			"<b>Quer números e um mapa?</b> Veja a aba «Análise».",
-			"",
-			"<b>Liga / desliga</b>",
-			"O botão ⚡ no topo da janela desativa todos os atalhos (F, R, T, G…). Desligado, apertar as teclas não faz nada.",
-			"",
-			"<b>Fechar de vez</b>",
-			"O botão X no canto salva tudo e remove o script por completo.",
-		}, "\n")
+	if not ui.helpText then
+		return
 	end
+	ui.helpText.Text = table.concat({
+		"<b>⏺ GRAVAR</b>",
+		"Posicione o personagem onde o percurso deve começar. [" .. keyName("start") .. "] inicia, [" .. keyName("stop") .. "] termina — dê um nome e salve. «Linhas mais retas», nesta mesma aba, tira o tremido do andar (vale para as próximas gravações, ou aplique numa que já existe).",
+		"",
+		"<b>✂ REGRAVAR</b>",
+		"Escolha um trecho (pontos A e B) de uma gravação já feita e refaça só aquele pedaço, sem gravar tudo de novo. «Novo início» faz a mesma coisa, mas a partir de um lugar diferente de onde você começou, encostando no trajeto antigo pra seguir dali.",
+		"",
+		"<b>▶ REPRODUZIR</b>",
+		"Selecione uma gravação na lista à esquerda → [" .. keyName("goto") .. "] leva até o ponto inicial (calculando a rota, contornando o que estiver no caminho) → [" .. keyName("play") .. "] imita o percurso gravado. [" .. keyName("stopplay") .. "] interrompe a qualquer momento.",
+		"",
+		"<b>▂▅█ ANÁLISE</b>",
+		"Números do percurso, mapa 3D (arraste para girar, role o scroll pra aproximar) e gráfico de velocidade da gravação selecionada.",
+		"",
+		"<b>⚙ AJUSTES</b>",
+		"Modo de movimento (teleporte ou andando), tolerância, guias no mundo (linha ou rastro de bonecos) e salvamento. O botão ⏻ no topo da janela desliga todos os atalhos de uma vez (útil se alguma tecla estiver atrapalhando outra coisa). O X no canto salva tudo e remove o script por completo.",
+	}, "\n")
 end
 
 local function refreshSettings()
@@ -1250,7 +1247,7 @@ local function refreshSettings()
 	ui.markerBtn.BackgroundColor3 = settings.marker and C.green or C.panel
 	ui.pathBtn.Text = settings.path and "Trajeto: ligado" or "Trajeto: desligado"
 	ui.pathBtn.BackgroundColor3 = settings.path and C.green or C.panel
-	ui.guideModeBtn.Text = (settings.guideMode == "dummy") and "Guia: 🚶 boneco" or "Guia: 〜 linha"
+	ui.guideModeBtn.Text = (settings.guideMode == "dummy") and "Guia: ⇢ boneco" or "Guia: 〜 linha"
 	ui.guideModeBtn.BackgroundColor3 = (settings.guideMode == "dummy") and C.purple or C.blueDark
 	ui.dummyIntLabel.Text = string.format("a cada %.1fs", settings.dummyInterval)
 	ui.autoBtn.Text = settings.autosave and "Auto-salvar: ligado" or "Auto-salvar: desligado"
@@ -1384,10 +1381,10 @@ local function openNameDialog(mode, rec)
 		ui.nameSave.Text = "✔  Renomear (Enter)"
 		ui.nameCancel.Text = "Cancelar"
 	else
-		ui.nameTitle.Text = "💾 Salvar gravação"
+		ui.nameTitle.Text = "▣ Salvar gravação"
 		ui.nameInfo.Text = string.format("Duração: %.1fs   •   %d pontos gravados", pending.duration, #pending.frames)
 		ui.nameBox.Text = "Gravação " .. (#recs + 1)
-		ui.nameSave.Text = "💾  Salvar (Enter)"
+		ui.nameSave.Text = "▣  Salvar (Enter)"
 		ui.nameCancel.Text = "Descartar"
 	end
 	ui.overlay.Visible = true
@@ -1800,14 +1797,14 @@ end
 -- anda até a posição de um CFrame e chama onArrive(chegou) quando terminar
 local function walkToCF(cf, onArrive)
 	state = "walking"
-	setStatus("🧭 Calculando a rota", C.teal)
+	setStatus("✛ Calculando a rota", C.teal)
 	setMsg("Calculando a rota até o ponto… ([" .. keyName("stopplay") .. "] cancela)", "info")
 	task.spawn(function()
 		local okW, errW = pcall(geo.walkRoute, cf, function(numPts)
 			if state ~= "walking" then
 				return
 			end
-			setStatus("🚶 Indo ao ponto", C.teal)
+			setStatus("⇢ Indo ao ponto", C.teal)
 			if numPts then
 				setMsg(string.format("Rota encontrada (%d pontos)! Indo até lá, contornando o que estiver no caminho. ([%s] cancela)", numPts, keyName("stopplay")), "info")
 			else
@@ -1884,7 +1881,7 @@ local function prepareAt(cf, vel, text, onReady, stay)
 			if state ~= "countdown" then
 				return
 			end
-			setStatus("⏳ Começa em " .. n, C.yellow)
+			setStatus("◷ Começa em " .. n, C.yellow)
 			showCount(tostring(n), "Prepare-se! Quando aparecer VAI!, comece a andar.", C.yellow, 120)
 			task.wait(1)
 		end
@@ -2160,14 +2157,14 @@ end
 
 local function fillExport()
 	if ui.ioAll then
-		ui.ioTitle.Text = "📤 Exportar todas (" .. #recs .. ")"
+		ui.ioTitle.Text = "↑ Exportar todas (" .. #recs .. ")"
 		ui.ioBox.Text = encodeAll()
-		ui.ioToggle.Text = "📄 Só a selecionada"
+		ui.ioToggle.Text = "▫ Só a selecionada"
 	else
 		local rec = recs[selected]
-		ui.ioTitle.Text = "📤 Exportar «" .. rec.name .. "»"
+		ui.ioTitle.Text = "↑ Exportar «" .. rec.name .. "»"
 		ui.ioBox.Text = recJSON(rec)
-		ui.ioToggle.Text = "📚 Exportar todas"
+		ui.ioToggle.Text = "▦ Exportar todas"
 	end
 end
 
@@ -2187,15 +2184,15 @@ local function openIO(mode)
 	ui.ioMode = mode
 	if mode == "export" then
 		ui.ioHelp.Text = "Clique em «Selecionar tudo», copie com Ctrl+C e guarde o texto (num bloco de notas, por exemplo). Para recuperar, use «Importar» e cole o texto."
-		ui.ioAction.Text = "🔎  Selecionar tudo"
+		ui.ioAction.Text = "⎘  Selecionar tudo"
 		ui.ioAction.BackgroundColor3 = C.blue
 		ui.ioToggle.Visible = true
 		fillExport()
 	else
-		ui.ioTitle.Text = "📥 Importar gravação(ões)"
+		ui.ioTitle.Text = "↓ Importar gravação(ões)"
 		ui.ioHelp.Text = "Cole abaixo o texto exportado antes (uma gravação ou todas) e clique em «Importar»."
 		ui.ioBox.Text = ""
-		ui.ioAction.Text = "📥  Importar"
+		ui.ioAction.Text = "↓  Importar"
 		ui.ioAction.BackgroundColor3 = C.green
 		ui.ioToggle.Visible = false
 	end
@@ -2295,7 +2292,7 @@ end
 ----------------------------------------------------------------------
 local function refreshPower()
 	if ui.powerBtn then
-		ui.powerBtn.Text = enabled and "⚡ Ligado" or "⚡ Desligado"
+		ui.powerBtn.Text = enabled and "⏻ Ligado" or "⏻ Desligado"
 		ui.powerBtn.BackgroundColor3 = enabled and C.green or C.red
 	end
 	if ui.miniPower then
@@ -2330,7 +2327,7 @@ local function setEnabled(value)
 		setMsg("Sistema ligado! Os atalhos voltaram a funcionar.", "ok")
 	else
 		local extra = settings.hideMini and (" Só a tecla [" .. keyName("toggle") .. "] continua funcionando, para você poder abrir o painel.") or ""
-		setMsg("Sistema desligado: nenhuma tecla do gravador funciona e os guias sumiram do mundo. Clique em «⚡ Desligado» para ligar de novo." .. extra, "warn")
+		setMsg("Sistema desligado: nenhuma tecla do gravador funciona e os guias sumiram do mundo. Clique em «⏻ Desligado» para ligar de novo." .. extra, "warn")
 	end
 end
 
@@ -2727,14 +2724,14 @@ local function safe(fn)
 end
 
 local ACTIONS = {
-	{ id = "start", tab = "rec", icon = "🔴", color = C.red, title = "Iniciar gravação", desc = "Começa a gravar tudo que você faz: andar, pular e girar.", default = Enum.KeyCode.F, fn = safe(startRecording) },
+	{ id = "start", tab = "rec", icon = "⏺", color = C.red, title = "Iniciar gravação", desc = "Começa a gravar tudo que você faz: andar, pular e girar.", default = Enum.KeyCode.F, fn = safe(startRecording) },
 	{ id = "stop", tab = "rec", icon = "⏹", color = C.yellow, title = "Parar gravação", desc = "Termina a gravação (ou a regravação de um trecho).", default = Enum.KeyCode.R, fn = safe(stopRecordingAction) },
 	{ id = "edit", tab = "edit", icon = "✂", color = C.blue, title = "Regravar o trecho", desc = "Vai ao ponto A (ou começa onde você está), conta 3s e grava o trecho.", default = Enum.KeyCode.V, fn = safe(startEditRecording) },
-	{ id = "newstart", tab = "edit", icon = "🧲", color = C.teal, title = "Novo início (juntar)", desc = "Fique no novo ponto inicial, fora do trajeto, e ande até encostar no trajeto antigo: os dois se juntam sozinhos.", height = 72, default = Enum.KeyCode.N, fn = safe(startJoinRecording) },
-	{ id = "goto", tab = "play", icon = "📍", color = C.teal, title = "Ir ao ponto inicial", desc = "Leva você até onde a gravação selecionada começou.", default = Enum.KeyCode.T, fn = safe(goToStart) },
+	{ id = "newstart", tab = "edit", icon = "⋈", color = C.teal, title = "Novo início (juntar)", desc = "Fique no novo ponto inicial, fora do trajeto, e ande até encostar no trajeto antigo: os dois se juntam sozinhos.", height = 72, default = Enum.KeyCode.N, fn = safe(startJoinRecording) },
+	{ id = "goto", tab = "play", icon = "⊙", color = C.teal, title = "Ir ao ponto inicial", desc = "Leva você até onde a gravação selecionada começou.", default = Enum.KeyCode.T, fn = safe(goToStart) },
 	{ id = "play", tab = "play", icon = "▶", color = C.green, title = "Iniciar imitação", desc = "Repete a gravação selecionada. Só inicia no ponto inicial.", default = Enum.KeyCode.G, fn = safe(startPlayback) },
-	{ id = "stopplay", tab = "play", icon = "✋", color = C.red, title = "Parar imitação", desc = "Interrompe a imitação, a caminhada ou a contagem a qualquer momento.", default = Enum.KeyCode.Y, fn = safe(stopPlayback) },
-	{ id = "toggle", tab = "cfg", icon = "👁", color = C.purple, title = "Minimizar / mostrar", desc = "Recolhe a janela num botãozinho 🎬. Clique nele (ou use a tecla) para abrir.", default = Enum.KeyCode.H, fn = safe(toggleGui) },
+	{ id = "stopplay", tab = "play", icon = "⏸", color = C.red, title = "Parar imitação", desc = "Interrompe a imitação, a caminhada ou a contagem a qualquer momento.", default = Enum.KeyCode.Y, fn = safe(stopPlayback) },
+	{ id = "toggle", tab = "cfg", icon = "⊟", color = C.purple, title = "Minimizar / mostrar", desc = "Recolhe a janela num botãozinho ◈. Clique nele (ou use a tecla) para abrir.", default = Enum.KeyCode.H, fn = safe(toggleGui) },
 }
 local ACTION_BY_ID = {}
 for _, a in ipairs(ACTIONS) do
@@ -2814,7 +2811,7 @@ end
 
 local main = make("Frame", {
 	Name = "Janela",
-	Size = UDim2.fromOffset(840, 580),
+	Size = UDim2.fromOffset(912, 580),
 	AnchorPoint = Vector2.new(0.5, 0.5),
 	Position = UDim2.fromScale(0.5, 0.5),
 	BackgroundColor3 = C.bg,
@@ -2826,7 +2823,7 @@ make("UIGradient", { Color = ColorSequence.new(Color3.fromRGB(26, 30, 44), Color
 ui.main = main
 
 local uiScale = make("UIScale", {}, main)
-addScale(uiScale, 900, 640)
+addScale(uiScale, 960, 640)
 
 -- Arrastar (e, se não arrastou, tratar como clique).
 -- Só reage ao toque/clique ESQUERDO que COMEÇOU neste botão: o botão direito e cliques em
@@ -2880,7 +2877,7 @@ end
 -- Botãozinho do modo minimizado
 ui.mini = button({
 	Name = "Minimizado",
-	Text = "🎬",
+	Text = "◈",
 	TextSize = 26,
 	BackgroundColor3 = C.blue,
 	Size = UDim2.fromOffset(56, 56),
@@ -2897,10 +2894,10 @@ makeDraggable(ui.mini, ui.mini, nil, function()
 	setMinimized(false)
 end)
 
--- mini botão ⚡ (liga/desliga) que acompanha o 🎬 quando o painel está minimizado
+-- mini botão ⏻ (liga/desliga) que acompanha o ◈ quando o painel está minimizado
 ui.miniPower = button({
 	Name = "MiniLigar",
-	Text = "⚡",
+	Text = "⏻",
 	TextSize = 13,
 	BackgroundColor3 = C.green,
 	Size = UDim2.fromOffset(26, 26),
@@ -2994,8 +2991,8 @@ ui.countHint.TextStrokeTransparency = 0.35
 
 -- Barra de título
 local titleBar = make("Frame", { Size = UDim2.new(1, 0, 0, 56), BackgroundTransparency = 1, Active = true }, main)
-label({ Text = "🎬 ECO", Font = Enum.Font.GothamBold, TextSize = 21, Size = UDim2.fromOffset(276, 26), Position = UDim2.fromOffset(20, 6) }, titleBar)
-label({ Text = "Gravador de parkour  •  por 0tavio50", TextSize = 12, TextColor3 = C.sub, Size = UDim2.fromOffset(276, 18), Position = UDim2.fromOffset(20, 32), TextTruncate = Enum.TextTruncate.AtEnd }, titleBar)
+label({ Text = "◈ Eco do Movimento", Font = Enum.Font.GothamBold, TextSize = 21, Size = UDim2.fromOffset(348, 26), Position = UDim2.fromOffset(20, 6), TextTruncate = Enum.TextTruncate.AtEnd }, titleBar)
+label({ Text = "Gravador de parkour  •  por 0tavio50", TextSize = 12, TextColor3 = C.sub, Size = UDim2.fromOffset(348, 18), Position = UDim2.fromOffset(20, 32), TextTruncate = Enum.TextTruncate.AtEnd }, titleBar)
 local accent = make("Frame", { Size = UDim2.new(1, -32, 0, 3), Position = UDim2.fromOffset(16, 56), BackgroundColor3 = C.teal }, main)
 corner(accent, 2)
 make("UIGradient", { Color = ColorSequence.new({ ColorSequenceKeypoint.new(0, C.teal), ColorSequenceKeypoint.new(0.5, C.blue), ColorSequenceKeypoint.new(1, C.purple) }) }, accent)
@@ -3014,7 +3011,7 @@ minBtn.MouseButton1Click:Connect(function()
 end)
 
 -- Botão geral: liga / desliga todos os atalhos
-ui.powerBtn = button({ Text = "⚡ Ligado", TextSize = 12, BackgroundColor3 = C.green, Size = UDim2.fromOffset(92, 32), Position = UDim2.new(1, -422, 0, 12) }, titleBar)
+ui.powerBtn = button({ Text = "⏻ Ligado", TextSize = 12, BackgroundColor3 = C.green, Size = UDim2.fromOffset(92, 32), Position = UDim2.new(1, -422, 0, 12) }, titleBar)
 corner(ui.powerBtn, 16)
 ui.powerBtn.MouseButton1Click:Connect(safe(function()
 	setEnabled(not enabled)
@@ -3028,7 +3025,7 @@ ui.closeBtn.MouseButton1Click:Connect(safe(closeScript))
 -- Painel esquerdo: lista de gravações
 local left = make("Frame", { Size = UDim2.fromOffset(250, 436), Position = UDim2.fromOffset(16, 68), BackgroundColor3 = C.panel }, main)
 corner(left, 12)
-label({ Text = "📁 Gravações salvas", Font = Enum.Font.GothamBold, TextSize = 15, Size = UDim2.new(1, -20, 0, 28), Position = UDim2.fromOffset(12, 6) }, left)
+label({ Text = "▤ Gravações salvas", Font = Enum.Font.GothamBold, TextSize = 15, Size = UDim2.new(1, -20, 0, 28), Position = UDim2.fromOffset(12, 6) }, left)
 label({ Text = "Clique numa gravação para selecioná-la", TextSize = 11, TextColor3 = C.sub, Size = UDim2.new(1, -20, 0, 14), Position = UDim2.fromOffset(12, 30) }, left)
 
 ui.listFrame = make("ScrollingFrame", {
@@ -3050,19 +3047,20 @@ ui.emptyLabel = label({
 	Position = UDim2.fromOffset(8, 60),
 }, left)
 
--- botões do painel esquerdo (grade 2×2 + excluir)
-local renameBtn = button({ Text = "✏ Renomear", TextSize = 13, BackgroundColor3 = C.blueDark, Size = UDim2.new(0.5, -12, 0, 36), Position = UDim2.new(0, 8, 1, -136) }, left)
-corner(renameBtn, 10)
-local dupBtn = button({ Text = "📑 Duplicar", TextSize = 13, BackgroundColor3 = C.blueDark, Size = UDim2.new(0.5, -12, 0, 36), Position = UDim2.new(0.5, 4, 1, -136) }, left)
-corner(dupBtn, 10)
-local exportBtn = button({ Text = "📤 Exportar", TextSize = 13, BackgroundColor3 = C.blueDark, Size = UDim2.new(0.5, -12, 0, 36), Position = UDim2.new(0, 8, 1, -92) }, left)
-corner(exportBtn, 10)
-local importBtn = button({ Text = "📥 Importar", TextSize = 13, BackgroundColor3 = C.blueDark, Size = UDim2.new(0.5, -12, 0, 36), Position = UDim2.new(0.5, 4, 1, -92) }, left)
-corner(importBtn, 10)
-local saveAllBtn = button({ Text = "💾 Salvar tudo", TextSize = 13, BackgroundColor3 = C.green, Size = UDim2.new(0.5, -12, 0, 40), Position = UDim2.new(0, 8, 1, -48) }, left)
-corner(saveAllBtn, 10)
-ui.delBtn = button({ Text = "🗑 Excluir", TextSize = 13, BackgroundColor3 = C.card, Size = UDim2.new(0.5, -12, 0, 40), Position = UDim2.new(0.5, 4, 1, -48) }, left)
-corner(ui.delBtn, 10)
+	-- botões do painel esquerdo (grade 2×2 + excluir): ícone grande + legenda pequena, pra reconhecer sem ler
+	local function sideBtn(pos, h, bg, icon, lbl)
+		local b = button({ Text = "", BackgroundColor3 = bg, Size = UDim2.new(0.5, -12, 0, h), Position = pos }, left)
+		corner(b, 10)
+		local iconLbl = label({ Text = icon, Font = Enum.Font.GothamBold, TextSize = 18, TextXAlignment = Enum.TextXAlignment.Center, Size = UDim2.fromOffset(28, h), Position = UDim2.fromOffset(8, 0) }, b)
+		local capLbl = label({ Text = lbl, Font = Enum.Font.GothamBold, TextSize = 12, TextColor3 = C.white, TextXAlignment = Enum.TextXAlignment.Left, TextTruncate = Enum.TextTruncate.AtEnd, Size = UDim2.new(1, -42, 1, 0), Position = UDim2.fromOffset(34, 0) }, b)
+		return b, iconLbl, capLbl
+	end
+	local renameBtn = sideBtn(UDim2.new(0, 8, 1, -136), 36, C.blueDark, "✏", "Renomear")
+	local dupBtn = sideBtn(UDim2.new(0.5, 4, 1, -136), 36, C.blueDark, "⧉", "Duplicar")
+	local exportBtn = sideBtn(UDim2.new(0, 8, 1, -92), 36, C.blueDark, "↑", "Exportar")
+	local importBtn = sideBtn(UDim2.new(0.5, 4, 1, -92), 36, C.blueDark, "↓", "Importar")
+	local saveAllBtn = sideBtn(UDim2.new(0, 8, 1, -48), 40, C.green, "▣", "Salvar tudo")
+	ui.delBtn, ui.delIcon, ui.delLabel = sideBtn(UDim2.new(0.5, 4, 1, -48), 40, C.card, "⌫", "Excluir")
 
 renameBtn.MouseButton1Click:Connect(safe(startRename))
 dupBtn.MouseButton1Click:Connect(safe(duplicateRec))
@@ -3083,7 +3081,8 @@ end)
 local delArmed, delToken = false, 0
 local function resetDel()
 	delArmed = false
-	ui.delBtn.Text = "🗑 Excluir"
+	ui.delIcon.Text = "⌫"
+	ui.delLabel.Text = "Excluir"
 	ui.delBtn.BackgroundColor3 = C.card
 end
 ui.delBtn.MouseButton1Click:Connect(function()
@@ -3099,7 +3098,8 @@ ui.delBtn.MouseButton1Click:Connect(function()
 		delArmed = true
 		delToken += 1
 		local tok = delToken
-		ui.delBtn.Text = "⚠ Confirmar?"
+		ui.delIcon.Text = "⚠"
+		ui.delLabel.Text = "Confirmar?"
 		ui.delBtn.BackgroundColor3 = C.red
 		task.delay(3, function()
 			if delArmed and tok == delToken then
@@ -3119,7 +3119,7 @@ ui.delBtn.MouseButton1Click:Connect(function()
 end)
 
 -- Painel direito: abas
-local right = make("Frame", { Size = UDim2.fromOffset(542, 436), Position = UDim2.fromOffset(282, 68), BackgroundTransparency = 1 }, main)
+local right = make("Frame", { Size = UDim2.fromOffset(614, 436), Position = UDim2.fromOffset(282, 68), BackgroundTransparency = 1 }, main)
 
 -- Faixa de resumo (sempre visível): gravação selecionada + situação ao vivo
 do
@@ -3134,9 +3134,9 @@ updateSummary = function()
 	if not ui.sumTitle then
 		return
 	end
-	local modeTxt = (settings.mode == "tp") and "⚡ Teleporte" or "🚶 Natural"
+	local modeTxt = (settings.mode == "tp") and "⏻ Teleporte" or "⇢ Natural"
 	if settings.straighten then
-		modeTxt ..= " • 📏 retas"
+		modeTxt ..= " • ▬ retas"
 	end
 	local rec = selected and recs[selected]
 	if not rec then
@@ -3147,87 +3147,103 @@ updateSummary = function()
 	end
 	local st = getStats(rec)
 	ui.sumTitle.Text = esc(rec.name)
-	ui.sumLine.Text = string.format("⏱ %.1fs • 📏 %.0f studs • 🦘 %d pulos • 🏃 %.0f/s", rec.duration, st.length, st.jumps, st.avgSpeed)
+	ui.sumLine.Text = string.format("⏱ %.1fs • ▬ %.0f studs • ↑ %d pulos • → %.0f/s", rec.duration, st.length, st.jumps, st.avgSpeed)
 	local _, _, root = getCharacter()
 	local where = ""
 	if root then
 		local d = (root.Position - rec.frames[1].cf.Position).Magnitude
 		if d <= settings.tolerance then
-			where = string.format('<font color="rgb(60,190,115)">📍 no início ✔ (%.1f)</font>', d)
+			where = string.format('<font color="rgb(60,190,115)">⊙ no início ✔ (%.1f)</font>', d)
 		else
-			where = string.format('<font color="rgb(232,84,84)">📍 a %.1f studs do início</font>', d)
+			where = string.format('<font color="rgb(232,84,84)">⊙ a %.1f studs do início</font>', d)
 		end
 	end
 	ui.sumRight.Text = where .. '\n<font color="rgb(150,158,180)">' .. modeTxt .. "</font>"
 end
 
-local tabBar = make("Frame", { Size = UDim2.new(1, 0, 0, 38), Position = UDim2.fromOffset(0, 60), BackgroundTransparency = 1 }, right)
-make("UIListLayout", { FillDirection = Enum.FillDirection.Horizontal, Padding = UDim.new(0, 6), SortOrder = Enum.SortOrder.LayoutOrder }, tabBar)
+	-- coluna de navegação (ícone puro — o símbolo já diz o que é) + área de conteúdo ao lado
+	local RAIL_W = 64
+	local rail = make("Frame", { Size = UDim2.fromOffset(RAIL_W, 376), Position = UDim2.fromOffset(0, 60), BackgroundTransparency = 1 }, right)
+	local contentArea = make("Frame", { Size = UDim2.fromOffset(542, 376), Position = UDim2.fromOffset(RAIL_W + 8, 60), BackgroundTransparency = 1 }, right)
+	ui.contentTitle = label({ Text = "", Font = Enum.Font.GothamBold, TextSize = 13, TextColor3 = C.sub, Size = UDim2.new(1, 0, 0, 20), Position = UDim2.fromOffset(2, 0) }, contentArea)
 
-local TABS = {
-	{ id = "rec", text = "🎥 Gravar" },
-	{ id = "edit", text = "✂ Regravar" },
-	{ id = "play", text = "▶ Reproduzir" },
-	{ id = "analysis", text = "📊 Análise" },
-	{ id = "cfg", text = "⚙ Ajustes" },
-}
-local tabCounters = {}
+	local TABS = {
+		{ id = "rec", icon = "⏺", label = "Gravar" },
+		{ id = "edit", icon = "✂", label = "Regravar" },
+		{ id = "play", icon = "▶", label = "Reproduzir" },
+		{ id = "analysis", icon = "▂▅█", label = "Análise" },
+		{ id = "cfg", icon = "⚙", label = "Ajustes" },
+	{ id = "help", icon = "?", label = "Ajuda" },
+	}
+	local tabCounters = {}
 
-for i, tab in ipairs(TABS) do
-	local btn = button({ Text = tab.text, TextSize = 13, BackgroundColor3 = C.panel, Size = UDim2.fromOffset(103, 38), LayoutOrder = i }, tabBar)
-	corner(btn, 10)
-	local glow = make("UIStroke", { Color = C.teal, Thickness = 1.5, Transparency = 1 }, btn)
-	ui.tabBtns[tab.id] = btn
-	ui.tabGlow[tab.id] = glow
+	local RAIL_BTN = 52
+	local railTotal = #TABS * RAIL_BTN + (#TABS - 1) * 8
+	local railY = (376 - railTotal) / 2
+	for i, tab in ipairs(TABS) do
+		local btn = button({ Text = tab.icon, TextSize = 24, BackgroundTransparency = 1, TextColor3 = C.sub, Size = UDim2.fromOffset(RAIL_BTN, RAIL_BTN), Position = UDim2.fromOffset(6, railY + (i - 1) * (RAIL_BTN + 8)), LayoutOrder = i }, rail)
+		corner(btn, 12)
+		local glow = make("UIStroke", { Color = C.teal, Thickness = 1.5, Transparency = 1 }, btn)
+		ui.tabBtns[tab.id] = btn
+		ui.tabGlow[tab.id] = glow
+		ui.tabLabels[tab.id] = { icon = btn }
 
-	local frame = make("ScrollingFrame", {
-		Size = UDim2.new(1, 0, 1, -106),
-		Position = UDim2.fromOffset(0, 106),
-		BackgroundTransparency = 1,
-		Visible = false,
-		ScrollBarThickness = 4,
-		CanvasSize = UDim2.new(),
-		AutomaticCanvasSize = Enum.AutomaticSize.Y,
-		ScrollingDirection = Enum.ScrollingDirection.Y,
-	}, right)
-	make("UIListLayout", { Padding = UDim.new(0, 6), SortOrder = Enum.SortOrder.LayoutOrder }, frame)
-	ui.tabFrames[tab.id] = frame
-	tabCounters[tab.id] = 0
-end
-
-local function selectTab(id)
-	ui.tab = id
-	for tid, frame in pairs(ui.tabFrames) do
-		frame.Visible = (tid == id)
+		local frame = make("ScrollingFrame", {
+			Size = UDim2.new(1, 0, 1, -26),
+			Position = UDim2.fromOffset(0, 26),
+			BackgroundTransparency = 1,
+			Visible = false,
+			ScrollBarThickness = 4,
+			CanvasSize = UDim2.new(),
+			AutomaticCanvasSize = Enum.AutomaticSize.Y,
+			ScrollingDirection = Enum.ScrollingDirection.Y,
+		}, contentArea)
+		make("UIListLayout", { Padding = UDim.new(0, 6), SortOrder = Enum.SortOrder.LayoutOrder }, frame)
+		ui.tabFrames[tab.id] = frame
+		tabCounters[tab.id] = 0
 	end
-	for tid, btn in pairs(ui.tabBtns) do
-		btn.BackgroundColor3 = (tid == id) and C.blue or C.panel
-		btn.TextColor3 = (tid == id) and C.white or C.sub
-		ui.tabGlow[tid].Transparency = (tid == id) and 0.2 or 1
+
+	local function selectTab(id)
+		ui.tab = id
+		for tid, frame in pairs(ui.tabFrames) do
+			frame.Visible = (tid == id)
+		end
+		for i, tab in ipairs(TABS) do
+			local tid = tab.id
+			local active = (tid == id)
+			local btn = ui.tabBtns[tid]
+			btn.BackgroundTransparency = active and 0 or 1
+			btn.BackgroundColor3 = C.blue
+			btn.TextColor3 = active and C.white or C.sub
+			ui.tabGlow[tid].Transparency = active and 0.2 or 1
+			if active then
+				ui.contentTitle.Text = tab.label
+			end
+		end
+		if id == "play" then
+			updateInfo()
+		elseif id == "edit" then
+			refreshEdit()
+		elseif id == "analysis" then
+			ui.anaDirty = true
+		end
+		ui.cutDirty = true
+		pcall(updateSummary)
 	end
-	if id == "play" then
-		updateInfo()
-	elseif id == "edit" then
-		refreshEdit()
-	elseif id == "analysis" then
-		ui.anaDirty = true
-	end
-	ui.cutDirty = true
-	pcall(updateSummary)
-end
-for _, tab in ipairs(TABS) do
-	local tb = ui.tabBtns[tab.id]
-	tb.MouseButton1Click:Connect(function()
-		selectTab(tab.id)
-	end)
+	for _, tab in ipairs(TABS) do
+		local tb = ui.tabBtns[tab.id]
+		tb.MouseButton1Click:Connect(function()
+			selectTab(tab.id)
+		end)
 	tb.MouseEnter:Connect(function()
 		if ui.tab ~= tab.id then
+			tb.BackgroundTransparency = 0
 			tb.BackgroundColor3 = C.cardHover
 		end
 	end)
 	tb.MouseLeave:Connect(function()
 		if ui.tab ~= tab.id then
-			tb.BackgroundColor3 = C.panel
+			tb.BackgroundTransparency = 1
 		end
 	end)
 end
@@ -3250,16 +3266,17 @@ local function newCard(tabId, iconText, iconColor, title, desc, height)
 	local icon = label({
 		Text = iconText,
 		Font = Enum.Font.GothamBold,
-		TextSize = 20,
+		TextSize = 23,
 		TextXAlignment = Enum.TextXAlignment.Center,
-		Size = UDim2.fromOffset(40, 40),
-		Position = UDim2.new(0, 10, 0.5, -20),
+		Size = UDim2.fromOffset(44, 44),
+		Position = UDim2.new(0, 10, 0.5, -22),
 	}, card)
 	icon.BackgroundTransparency = 0
 	icon.BackgroundColor3 = iconColor
-	corner(icon, 10)
-	label({ Text = title, Font = Enum.Font.GothamBold, TextSize = 15, Size = UDim2.new(1, -190, 0, 20), Position = UDim2.fromOffset(60, 6) }, card)
-	local descLabel = label({ Text = desc, TextSize = 11, TextColor3 = C.sub, TextWrapped = true, TextYAlignment = Enum.TextYAlignment.Top, Size = UDim2.new(1, -190, 0, height - 30), Position = UDim2.fromOffset(60, 26) }, card)
+	corner(icon, 11)
+	make("UIStroke", { Color = iconColor, Thickness = 1, Transparency = 0.3 }, icon)
+	label({ Text = title, Font = Enum.Font.GothamBold, TextSize = 15, Size = UDim2.new(1, -194, 0, 20), Position = UDim2.fromOffset(64, 6) }, card)
+	local descLabel = label({ Text = desc, TextSize = 11, TextColor3 = C.sub, TextWrapped = true, TextYAlignment = Enum.TextYAlignment.Top, Size = UDim2.new(1, -194, 0, height - 30), Position = UDim2.fromOffset(64, 26) }, card)
 	return card, descLabel
 end
 
@@ -3279,7 +3296,7 @@ local function newActionCard(a)
 			return
 		end
 		if not enabled and a.id ~= "toggle" then
-			setMsg("O sistema está desligado. Clique em «⚡ Desligado» (no topo da janela) para ligar.", "warn")
+			setMsg("O sistema está desligado. Clique em «⏻ Desligado» (no topo da janela) para ligar.", "warn")
 			return
 		end
 		a.fn()
@@ -3337,7 +3354,7 @@ end
 
 newHeader("rec", "TRAJETO")
 do
-	local strCard = newCard("rec", "📏", C.teal, "Linhas mais retas", "Tira o «tremido» do andar: o trajeto no chão vira linhas retas. Curvas, alturas, tempos e pulos/quedas são mantidos. Em parkour de precisão, use força baixa.", 118)
+	local strCard = newCard("rec", "▬", C.teal, "Linhas mais retas", "Tira o «tremido» do andar: o trajeto no chão vira linhas retas. Curvas, alturas, tempos e pulos/quedas são mantidos. Em parkour de precisão, use força baixa.", 118)
 	ui.straightBtn = button({ Text = "", TextSize = 11, Size = UDim2.fromOffset(150, 30), Position = UDim2.new(1, -160, 0, 6) }, strCard)
 	corner(ui.straightBtn, 8)
 	local stBox = make("Frame", { Size = UDim2.fromOffset(150, 30), Position = UDim2.new(1, -160, 0, 44), BackgroundTransparency = 1 }, strCard)
@@ -3346,7 +3363,7 @@ do
 	ui.straightVal = label({ Text = "", Font = Enum.Font.GothamBold, TextSize = 12, TextXAlignment = Enum.TextXAlignment.Center, Size = UDim2.fromOffset(76, 30), Position = UDim2.fromOffset(37, 0) }, stBox)
 	local stPlus = button({ Text = "+", TextSize = 18, BackgroundColor3 = C.panel, Size = UDim2.fromOffset(34, 30), Position = UDim2.fromOffset(116, 0) }, stBox)
 	corner(stPlus, 8)
-	ui.straightApply = button({ Text = "📏 Aplicar à selecionada", TextSize = 11, BackgroundColor3 = C.blueDark, Size = UDim2.fromOffset(150, 30), Position = UDim2.new(1, -160, 0, 82) }, strCard)
+	ui.straightApply = button({ Text = "▬ Aplicar à selecionada", TextSize = 11, BackgroundColor3 = C.blueDark, Size = UDim2.fromOffset(150, 30), Position = UDim2.new(1, -160, 0, 82) }, strCard)
 	corner(ui.straightApply, 8)
 
 	ui.straightBtn.MouseButton1Click:Connect(function()
@@ -3373,8 +3390,6 @@ do
 	ui.straightApply.MouseButton1Click:Connect(safe(straightenSelected))
 end
 
-newHeader("rec", "COMO USAR")
-ui.recHelp = newInfoBox("rec", 410)
 
 -- Aba Regravar
 ui.editInfo = newInfoBox("edit", 124)
@@ -3388,7 +3403,7 @@ local function newSlider(tabId, which, color, titleText, hintText)
 	local plus = button({ Text = "▶", TextSize = 13, BackgroundColor3 = C.panel, Size = UDim2.fromOffset(32, 26), Position = UDim2.new(1, -38, 0, 3) }, card)
 	corner(minus, 7)
 	corner(plus, 7)
-	local here = button({ Text = "📍 Aqui", TextSize = 11, BackgroundColor3 = C.blueDark, Size = UDim2.fromOffset(62, 26), Position = UDim2.new(1, -226, 0, 3) }, card)
+	local here = button({ Text = "⊙ Aqui", TextSize = 11, BackgroundColor3 = C.blueDark, Size = UDim2.fromOffset(62, 26), Position = UDim2.new(1, -226, 0, 3) }, card)
 	corner(here, 7)
 	here.MouseButton1Click:Connect(safe(function()
 		markPoint(which)
@@ -3476,8 +3491,8 @@ local function newSlider(tabId, which, color, titleText, hintText)
 	end
 end
 
-ui.sliders.a = newSlider("edit", "a", C.teal, "Começo mantido até (A)", "0 = refaz tudo desde o início  •  📍 Aqui = usa onde você está")
-ui.sliders.b = newSlider("edit", "b", C.yellow, "Final mantido de (B)", "No fim = refaz até o fim  •  📍 Aqui = usa onde você está")
+ui.sliders.a = newSlider("edit", "a", C.teal, "Começo mantido até (A)", "0 = refaz tudo desde o início  •  ⊙ Aqui = usa onde você está")
+ui.sliders.b = newSlider("edit", "b", C.yellow, "Final mantido de (B)", "No fim = refaz até o fim  •  ⊙ Aqui = usa onde você está")
 
 newHeader("edit", "2 · REGRAVE")
 for _, a in ipairs(ACTIONS) do
@@ -3541,7 +3556,7 @@ for _, a in ipairs(ACTIONS) do
 	end
 end
 do
-	local walkCard = newCard("play", "🚶", C.teal, "Como ir ao ponto inicial", "Teleporte: instantâneo. Andando: calcula a rota inteira primeiro (contornando o que estiver no caminho) e só então anda, sem parar no meio (no modo Natural é sempre assim).", 82)
+	local walkCard = newCard("play", "⇢", C.teal, "Como ir ao ponto inicial", "Teleporte: instantâneo. Andando: calcula a rota inteira primeiro (contornando o que estiver no caminho) e só então anda, sem parar no meio (no modo Natural é sempre assim).", 82)
 	ui.walkBtn = button({ Text = "", TextSize = 12, Size = UDim2.fromOffset(150, 40), Position = UDim2.new(1, -160, 0.5, -20) }, walkCard)
 	corner(ui.walkBtn, 8)
 	ui.walkBtn.MouseButton1Click:Connect(function()
@@ -3590,7 +3605,7 @@ local okAnalysis, errAnalysis = pcall(function()
 		Position = UDim2.fromOffset(4, 4),
 	}, mapCard)
 	ui.mapCaption = label({
-		Text = "🖱 arraste para girar  •  role o scroll (ou use +/−) para aproximar",
+		Text = "✛ arraste para girar  •  role o scroll (ou use +/−) para aproximar",
 		TextSize = 11,
 		TextColor3 = C.sub,
 		TextXAlignment = Enum.TextXAlignment.Center,
@@ -3847,7 +3862,7 @@ local okAnalysis, errAnalysis = pcall(function()
 		if root then
 			lines[#lines + 1] = string.format('<font color="rgb(150,158,180)">Você está a %.1f studs do início e a %.1f do fim.</font>', (root.Position - p1).Magnitude, (root.Position - p2).Magnitude)
 		end
-		lines[#lines + 1] = '<font color="rgb(150,158,180)">Mapa 3D: 🟢 início  🔴 fim  🟡 pulos  ⚪ você  •  arraste para girar, scroll para zoom</font>'
+		lines[#lines + 1] = '<font color="rgb(150,158,180)">Mapa 3D: ● início  ● fim  ● pulos  ● você  •  arraste para girar, scroll para zoom</font>'
 		ui.anaInfo.Text = table.concat(lines, "\n")
 	end
 
@@ -3871,7 +3886,7 @@ end
 -- Aba Ajustes
 newHeader("cfg", "SOBRE")
 do
-	local aboutCard = newCard("cfg", "🎬", C.blue, "ECO", "Gravador de movimentos de parkour: grave, regrave trechos e reproduza seus percursos com precisão.\nCriado por 0tavio50.", 80)
+	local aboutCard = newCard("cfg", "◈", C.blue, "Eco do Movimento", "Gravador de movimentos de parkour: grave, regrave trechos e reproduza seus percursos com precisão.\nCriado por 0tavio50.", 80)
 end
 
 newHeader("cfg", "SISTEMA")
@@ -3881,7 +3896,7 @@ for _, a in ipairs(ACTIONS) do
 	end
 end
 
-local hideCard = newCard("cfg", "🙈", C.purple, "Esconder o botãozinho", "Com o painel minimizado, o 🎬 (e o ⚡) somem. O painel só abre pela tecla de «Minimizar / mostrar».", 78)
+local hideCard = newCard("cfg", "⊘", C.purple, "Esconder o botãozinho", "Com o painel minimizado, o ◈ (e o ⏻) somem. O painel só abre pela tecla de «Minimizar / mostrar».", 78)
 ui.hideBtn = button({ Text = "", TextSize = 12, Size = UDim2.fromOffset(150, 40), Position = UDim2.new(1, -160, 0.5, -20) }, hideCard)
 corner(ui.hideBtn, 8)
 ui.hideBtn.MouseButton1Click:Connect(function()
@@ -3897,7 +3912,7 @@ ui.hideBtn.MouseButton1Click:Connect(function()
 end)
 
 newHeader("cfg", "MOVIMENTO E IMITAÇÃO")
-local modeCard = newCard("cfg", "🎯", C.blueDark, "Modo de movimento", "Teleporte: exato, melhor para parkour. Natural (experimental): anda de verdade; use se o jogo te puxar de volta.", 78)
+local modeCard = newCard("cfg", "◎", C.blueDark, "Modo de movimento", "Teleporte: exato, melhor para parkour. Natural (experimental): anda de verdade; use se o jogo te puxar de volta.", 78)
 ui.modeBtn = button({ Text = "", RichText = true, TextSize = 14, Size = UDim2.fromOffset(150, 44), Position = UDim2.new(1, -160, 0.5, -22) }, modeCard)
 corner(ui.modeBtn, 8)
 ui.modeBtn.MouseButton1Click:Connect(function()
@@ -3915,7 +3930,7 @@ ui.modeBtn.MouseButton1Click:Connect(function()
 	end
 end)
 
-local tolCard = newCard("cfg", "📏", C.teal, "Tolerância do início", "Distância máxima (studs) do ponto inicial para imitar. Também vale para «encostar» no trajeto ao juntar.", 66)
+local tolCard = newCard("cfg", "▬", C.teal, "Tolerância do início", "Distância máxima (studs) do ponto inicial para imitar. Também vale para «encostar» no trajeto ao juntar.", 66)
 local tolBox = make("Frame", { Size = UDim2.fromOffset(150, 40), Position = UDim2.new(1, -160, 0.5, -20), BackgroundTransparency = 1 }, tolCard)
 local tolMinus = button({ Text = "−", TextSize = 20, BackgroundColor3 = C.panel, Size = UDim2.fromOffset(40, 40) }, tolBox)
 corner(tolMinus, 8)
@@ -3935,7 +3950,7 @@ tolPlus.MouseButton1Click:Connect(function()
 end)
 
 newHeader("cfg", "GUIAS NO MUNDO")
-local guideCard = newCard("cfg", "🧭", C.green, "Guias no mundo", "Disco verde = ponto inicial. Guia do trajeto: a linha colorida com pontinhos, ou um rastro de bonecos fantasmas andando em loop — você escolhe qual. Só você vê.", 148)
+local guideCard = newCard("cfg", "✛", C.green, "Guias no mundo", "Disco verde = ponto inicial. Guia do trajeto: a linha colorida com pontinhos, ou um rastro de bonecos fantasmas andando em loop — você escolhe qual. Só você vê.", 148)
 ui.markerBtn = button({ Text = "", TextSize = 12, Size = UDim2.fromOffset(150, 32), Position = UDim2.new(1, -160, 0, 5) }, guideCard)
 corner(ui.markerBtn, 8)
 ui.pathBtn = button({ Text = "", TextSize = 12, Size = UDim2.fromOffset(150, 32), Position = UDim2.new(1, -160, 0, 37) }, guideCard)
@@ -3988,11 +4003,11 @@ dummyIntPlus.MouseButton1Click:Connect(function()
 end)
 
 newHeader("cfg", "SALVAMENTO")
-local saveCard, saveDesc = newCard("cfg", "💾", C.green, "Salvamento automático", "", 88)
+local saveCard, saveDesc = newCard("cfg", "▣", C.green, "Salvamento automático", "", 88)
 ui.saveDesc = saveDesc
 ui.autoBtn = button({ Text = "", TextSize = 12, Size = UDim2.fromOffset(150, 34), Position = UDim2.new(1, -160, 0, 8) }, saveCard)
 corner(ui.autoBtn, 8)
-ui.saveNowBtn = button({ Text = "💾 Salvar agora", TextSize = 12, BackgroundColor3 = C.blueDark, Size = UDim2.fromOffset(150, 34), Position = UDim2.new(1, -160, 0, 46) }, saveCard)
+ui.saveNowBtn = button({ Text = "▣ Salvar agora", TextSize = 12, BackgroundColor3 = C.blueDark, Size = UDim2.fromOffset(150, 34), Position = UDim2.new(1, -160, 0, 46) }, saveCard)
 corner(ui.saveNowBtn, 8)
 ui.autoBtn.MouseButton1Click:Connect(function()
 	settings.autosave = not settings.autosave
@@ -4011,6 +4026,20 @@ ui.saveNowBtn.MouseButton1Click:Connect(safe(function()
 	end
 	saveNow(true)
 end))
+-- Aba Ajuda
+do
+	local box = newPlainCard("help", 560)
+	box.BackgroundColor3 = C.panel
+	ui.helpText = label({
+		Text = "",
+		RichText = true,
+		TextSize = 13,
+		TextWrapped = true,
+		TextYAlignment = Enum.TextYAlignment.Top,
+		Size = UDim2.new(1, -24, 1, -16),
+		Position = UDim2.fromOffset(12, 8),
+	}, box)
+end
 
 -- Rodapé: mensagens
 ui.msgFrame = make("Frame", { Size = UDim2.new(1, -32, 0, 52), Position = UDim2.new(0, 16, 1, -64), BackgroundColor3 = MSG_COLORS.info[1] }, main)
@@ -4043,7 +4072,7 @@ local dlg = make("Frame", {
 corner(dlg, 14)
 make("UIStroke", { Color = C.blue, Thickness = 2 }, dlg)
 addScale(make("UIScale", {}, dlg), 480, 300)
-ui.nameTitle = label({ Text = "💾 Salvar gravação", Font = Enum.Font.GothamBold, TextSize = 20, Size = UDim2.new(1, -40, 0, 28), Position = UDim2.fromOffset(20, 16) }, dlg)
+ui.nameTitle = label({ Text = "▣ Salvar gravação", Font = Enum.Font.GothamBold, TextSize = 20, Size = UDim2.new(1, -40, 0, 28), Position = UDim2.fromOffset(20, 16) }, dlg)
 ui.nameInfo = label({ Text = "", TextSize = 12, TextColor3 = C.sub, Size = UDim2.new(1, -40, 0, 16), Position = UDim2.fromOffset(20, 46), TextTruncate = Enum.TextTruncate.AtEnd }, dlg)
 label({ Text = "Digite o nome:", TextSize = 13, Size = UDim2.new(1, -40, 0, 18), Position = UDim2.fromOffset(20, 80) }, dlg)
 ui.nameBox = make("TextBox", {
@@ -4062,7 +4091,7 @@ ui.nameBox = make("TextBox", {
 corner(ui.nameBox, 8)
 make("UIPadding", { PaddingLeft = UDim.new(0, 12), PaddingRight = UDim.new(0, 12) }, ui.nameBox)
 
-ui.nameSave = button({ Text = "💾  Salvar (Enter)", BackgroundColor3 = C.green, TextSize = 15, Size = UDim2.new(0.5, -26, 0, 44), Position = UDim2.new(0, 20, 1, -64) }, dlg)
+ui.nameSave = button({ Text = "▣  Salvar (Enter)", BackgroundColor3 = C.green, TextSize = 15, Size = UDim2.new(0.5, -26, 0, 44), Position = UDim2.new(0, 20, 1, -64) }, dlg)
 corner(ui.nameSave, 10)
 ui.nameCancel = button({ Text = "Descartar", BackgroundColor3 = C.red, TextSize = 15, Size = UDim2.new(0.5, -26, 0, 44), Position = UDim2.new(0.5, 6, 1, -64) }, dlg)
 corner(ui.nameCancel, 10)
@@ -4389,7 +4418,7 @@ refreshStoreInfo()
 renderList()
 selectTab("rec")
 refreshPower()
-setMsg("Bem-vindo ao ECO! Comece pela aba «Gravar». Arraste esta barra para mover a janela; clique no botão «TECLA» de qualquer ação para trocar o atalho.", "info")
+setMsg("Bem-vindo ao Eco do Movimento! Comece pela aba «Gravar». Arraste esta barra para mover a janela; clique no botão «TECLA» de qualquer ação para trocar o atalho.", "info")
 task.spawn(loadFromDisk)
 
 end) -- fim do envelope de segurança
